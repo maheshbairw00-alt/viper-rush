@@ -16,8 +16,12 @@ window.VR_CONFIG = {
   loadingSeconds: 2.6, // fake loading time (replace with real asset loading later)
 
   game: {
-    worldSize: 3600,   // arena is worldSize x worldSize
-    botCount: 14,      // enemy bots (offline mode)
+    worldSize: 6400,   // arena is worldSize x worldSize (big map with 5 zones)
+    botCount: 28,      // enemy bots (offline mode)
+    matchSeconds: 360, // one match = 6 minutes
+    zoneStart: 45,     // red wall starts closing after this many seconds
+    zoneEnd: 300,      // red wall reaches its smallest size here
+    zoneMinSize: 900,  // smallest safe area (square side)
     startMass: 12,
     speed: 210,
     boostSpeed: 380

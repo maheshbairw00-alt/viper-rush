@@ -7,6 +7,7 @@
  * MULTIPLAYER LATER: look for the "NETWORK HOOK" comments and replace them with calls to your
  * server (create party, join with code, friend request, accept, invite, like, guild).
  *
+ * Also: daily + weekly missions, ranks (solo and squad are separate) with seasons.
  * API:  VR.lobby.init()   VR.lobby.enter(user)   VR.lobby.refresh()   VR.lobby.recordGame(result)
  */
 (function () {
@@ -75,7 +76,84 @@
     user.level = Math.max(user.level || 1, 1 + Math.floor(user.xp / 500));
     user.coins = user.coins == null ? 500 : user.coins;
     user.gems = user.gems == null ? 20 : user.gems;
+    user.rp = user.rp || { solo: 0, squad: 0 };
+    var sn = seasonNo();
+    if (user.season !== sn) {            // new season: ranks drop a little
+      if (user.season) { user.rp.solo = Math.floor(user.rp.solo * .75); user.rp.squad = Math.floor(user.rp.squad * .75); }
+      user.season = sn;
+    }
+    ensureMissions();
   }
+
+  /* ---------- ranks (solo and squad are separate), seasons ---------- */
+  var TIERS = [['BRONZE', '#CD7F32'], ['SILVER', '#C0C8D8'], ['GOLD', '#FFD23F'], ['PLATINUM', '#5EEAD4'], ['DIAMOND', '#60A5FA']];
+  var LEGEND_RP = 1500, SEASON_DAYS = 28;
+  function dayNo() { return Math.floor(Date.now() / 864e5); }
+  function seasonNo() { return Math.floor(dayNo() / SEASON_DAYS) + 1; }
+  function seasonLeft() { return SEASON_DAYS - dayNo() % SEASON_DAYS; }
+  function rankOf(rp) {
+    if (rp >= LEGEND_RP) return { name: 'VIPER LEGEND', sub: '', color: '#FF4DA6', into: rp - LEGEND_RP, need: 0 };
+    var idx = Math.floor(rp / 100), t = Math.floor(idx / 3);
+    return { name: TIERS[t][0], sub: ['III', 'II', 'I'][idx % 3], color: TIERS[t][1], into: rp % 100, need: 100 };
+  }
+  function rankLabel(rp) { var r = rankOf(rp); return r.name + (r.sub ? ' ' + r.sub : ''); }
+  function rpGain(g) {
+    var base = g.win ? 40 : g.rank <= 3 ? 20 : g.rank <= 8 ? 8 : g.rank <= 15 ? 0 : -6;
+    return base + Math.min(30, g.kills * 3);
+  }
+  function rankBadge(color) {
+    return '<svg viewBox="0 0 60 66"><path d="M30 2 L56 12 V34 C56 50 44 60 30 64 C16 60 4 50 4 34 V12 Z" fill="' + color + '" stroke="#fff" stroke-width="3"/><path d="M30 10 L48 17 V34 C48 45 40 52 30 56 C20 52 12 45 12 34 V17 Z" fill="rgba(10,0,40,.55)"/><path d="M19 24 L30 44 L41 24" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+  function rpOther(name, mode) { var lv = (otherData({ name: name }).level) || 5; return Math.min(1700, hash(name + mode) % (lv * 45 + 250)); }
+
+  /* ---------- missions (daily + weekly) ---------- */
+  var DAILY = [
+    { id: 'matches', t: 'Play 3 matches', goal: 3, coins: 30, gems: 2, f: 'matches' },
+    { id: 'orbs', t: 'Eat 500 orbs', goal: 500, coins: 40, gems: 0, f: 'orbs' },
+    { id: 'kills', t: 'Eliminate 5 snakes', goal: 5, coins: 60, gems: 0, f: 'kills' },
+    { id: 'win', t: 'Become VIPER KING (win a match)', goal: 1, coins: 100, gems: 5, f: 'wins' }
+  ];
+  var WEEKLY = [
+    { id: 'squad10', t: 'Play 10 squad matches with friends', goal: 10, coins: 300, gems: 20, f: 'squad' },
+    { id: 'kills30', t: 'Eliminate 30 snakes', goal: 30, coins: 250, gems: 15, f: 'kills' },
+    { id: 'win3', t: 'Win 3 matches', goal: 3, coins: 400, gems: 25, f: 'wins' }
+  ];
+  function dayKey() { var d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+  function ensureMissions() {
+    var m = user.missions, wk = Math.floor(dayNo() / 7), dk = dayKey();
+    if (!m) m = user.missions = { day: dk, week: wk, d: {}, w: {} };
+    if (m.day !== dk) { m.day = dk; m.d = {}; }
+    if (m.week !== wk) { m.week = wk; m.w = {}; }
+    DAILY.forEach(function (x) { if (!m.d[x.id]) m.d[x.id] = { p: 0, c: false }; });
+    WEEKLY.forEach(function (x) { if (!m.w[x.id]) m.w[x.id] = { p: 0, c: false }; });
+  }
+  function addProgress(g) {
+    ensureMissions();
+    var add = { matches: 1, orbs: g.orbs || 0, kills: g.kills || 0, wins: g.win ? 1 : 0, squad: g.squad ? 1 : 0 };
+    DAILY.forEach(function (x) { user.missions.d[x.id].p = Math.min(x.goal, user.missions.d[x.id].p + add[x.f]); });
+    WEEKLY.forEach(function (x) { if (x.f !== 'orbs') user.missions.w[x.id].p = Math.min(x.goal, user.missions.w[x.id].p + add[x.f]); });
+  }
+  function claimable() {
+    ensureMissions(); var any = false, m = user.missions;
+    DAILY.forEach(function (x) { var q = m.d[x.id]; if (q.p >= x.goal && !q.c) any = true; });
+    WEEKLY.forEach(function (x) { var q = m.w[x.id]; if (q.p >= x.goal && !q.c) any = true; });
+    return any;
+  }
+  function saveUser() { if (VR.auth && VR.auth.user === user) VR.auth.save(); }
+  function recordGame(g) {
+    if (!user) return null;
+    var s = user.stats, key = g.squad ? 'squad' : 'solo';
+    s.matches++; s.kills += g.kills; s.best = Math.max(s.best, g.score);
+    if (g.win) s.wins++;
+    s.bestRank = s.bestRank ? Math.min(s.bestRank, g.rank) : g.rank;
+    var xp = Math.floor(g.score / 10) + g.kills * 5 + (g.win ? 150 : 0), coins = Math.floor(g.score / 40) + (g.win ? 50 : 0);
+    user.xp += xp; user.level = 1 + Math.floor(user.xp / 500); user.coins += coins;
+    var old = user.rp[key], floor = old >= LEGEND_RP ? LEGEND_RP : Math.floor(old / 300) * 300;
+    var nw = Math.max(floor, old + rpGain(g)); user.rp[key] = nw;
+    addProgress(g); saveUser();
+    return { coins: coins, xp: xp, rp: nw - old, rank: rankLabel(nw) };
+  }
+
   function otherData(p) {
     var h = hash(p.name), lv = p.level || (3 + h % 30);
     var matches = 10 + lv * 14 + h % 40;
@@ -96,17 +174,6 @@
   function userId() {
     var n = String(hash(user.id) * 7919 % 10000000000); while (n.length < 10) n = '0' + n;
     return n.slice(0, 4) + ' ' + n.slice(4, 8) + ' ' + n.slice(8);
-  }
-  function recordGame(g) {
-    if (!user) return;
-    var s = user.stats;
-    s.matches++; s.kills += g.kills; s.best = Math.max(s.best, g.score);
-    if (g.rank === 1) s.wins++;
-    s.bestRank = s.bestRank ? Math.min(s.bestRank, g.rank) : g.rank;
-    user.xp += Math.floor(g.score / 10) + g.kills * 5;
-    user.level = 1 + Math.floor(user.xp / 500);
-    user.coins += Math.floor(g.score / 40);
-    if (VR.auth && VR.auth.user === user) VR.auth.save();
   }
 
   /* ---------- snake picture for the lobby stage ---------- */
@@ -149,6 +216,7 @@
     $('lobby').classList.toggle('solo', mode === 'solo');
     var n = social ? social.requests.length : 0;
     $('frBadge').textContent = n ? n : '';
+    updateMissionDot();
   }
 
   function order() { // you in the middle, friends on both sides
@@ -357,6 +425,56 @@
   }
   function openGuild() { sheet = 'guild'; openSheet(guildHTML()); }
 
+  /* ---------- missions + ranks panels ---------- */
+  var mtab = 'daily', rtab = 'solo';
+  function updateMissionDot() { var b = $('missionBtn'); if (b && user) b.classList.toggle('has', claimable()); }
+
+  function openMissions() {
+    sheet = 'missions'; ensureMissions();
+    var list = mtab === 'daily' ? DAILY : WEEKLY, st = mtab === 'daily' ? user.missions.d : user.missions.w;
+    var h = head('MISSIONS') + '<div class="pbody"><div class="tabs">' +
+      '<button class="tab' + (mtab === 'daily' ? ' on' : '') + '" type="button" data-a="mtab" data-t="daily">DAILY</button>' +
+      '<button class="tab' + (mtab === 'weekly' ? ' on' : '') + '" type="button" data-a="mtab" data-t="weekly">WEEKLY</button></div><div class="flist">';
+    list.forEach(function (x) {
+      var q = st[x.id], done = q.p >= x.goal, rew = '+' + x.coins + ' COINS' + (x.gems ? '  +' + x.gems + ' DIAMONDS' : '');
+      var btn = q.c ? '<button class="gb dis" type="button" disabled>DONE &#10003;</button>' :
+        (done ? '<button class="gb" type="button" data-a="claim" data-w="' + mtab + '" data-id="' + x.id + '">CLAIM</button>' : '<button class="gb dis" type="button" disabled>' + q.p + ' / ' + x.goal + '</button>');
+      h += '<div class="mrow"><div class="fi"><b><span>' + esc(x.t) + '</span></b><div class="mbar"><i style="width:' + Math.min(100, q.p / x.goal * 100) + '%"></i></div><span class="mrew">' + rew + '</span></div>' + btn + '</div>';
+    });
+    h += '</div><div class="foot"><span>' + (mtab === 'daily' ? 'Daily missions reset every day' : 'Weekly missions reset every 7 days') + '</span><span>Win a match = VIPER KING!</span></div></div>';
+    openSheet(h);
+  }
+
+  function lbList(mode) {
+    var names = ['Raja_X', 'Naga', 'Sia', 'Rexx', 'Kaal', 'Vyom', 'Tej', 'Ishaan', 'Rhea', 'Dev', 'Anaya', 'Kavya', 'Veer', 'Aarav', 'Rudra', 'Kabir', 'Zoya', 'Arjun', 'Neel', 'Yash'];
+    var rows = names.map(function (n, i) { return { name: n, rp: 2100 - i * 52 - hash(n + mode) % 30 }; });
+    var mine = user.rp[mode], out = [], placed = false;
+    rows.forEach(function (r) { if (!placed && mine >= r.rp) { out.push({ name: user.name, rp: mine, you: true }); placed = true; } out.push(r); });
+    var rank = 0, youRow = null;
+    out.forEach(function (r, i) { r.n = i + 1; if (r.you) youRow = r; });
+    if (!youRow) { youRow = { name: user.name, rp: mine, you: true, n: Math.max(21, 21 + Math.round((LEGEND_RP - mine) * 2.2)) }; }
+    return { top: out.slice(0, 12), you: youRow, inTop: out.slice(0, 12).some(function (r) { return r.you; }) };
+  }
+
+  function openRanks() {
+    sheet = 'ranks';
+    var rp = user.rp[rtab], r = rankOf(rp), L = lbList(rtab);
+    var h = head('RANKS') + '<div class="pbody"><div class="tabs">' +
+      '<button class="tab' + (rtab === 'solo' ? ' on' : '') + '" type="button" data-a="rtab" data-t="solo">SOLO</button>' +
+      '<button class="tab' + (rtab === 'squad' ? ' on' : '') + '" type="button" data-a="rtab" data-t="squad">SQUAD</button></div>' +
+      '<div class="rkcard" style="--c:' + r.color + '"><div class="rkbadge">' + rankBadge(r.color) + '</div><div style="flex:1;min-width:0"><b>' + r.name + (r.sub ? ' ' + r.sub : '') + '</b>' +
+      '<small>' + rp + ' RP' + (r.need ? '  -  ' + (r.need - r.into) + ' RP TO NEXT' : '  -  TOP RANK') + '</small>' +
+      '<div class="mbar" style="margin-top:calc(var(--u)*1)"><i style="width:' + (r.need ? r.into / r.need * 100 : 100) + '%"></i></div></div>' +
+      '<div style="text-align:right"><small>SEASON ' + seasonNo() + '</small><small>' + seasonLeft() + ' DAYS LEFT</small></div></div>' +
+      '<div class="flist">';
+    L.top.forEach(function (x) {
+      h += '<div class="lbrow' + (x.you ? ' you' : '') + '"><span class="n">' + x.n + '</span><span class="nm">' + esc(x.you ? x.name + ' (YOU)' : x.name) + '</span><span class="rk">' + rankLabel(x.rp) + '</span><span class="rp">' + x.rp + '</span></div>';
+    });
+    if (!L.inTop) h += '<div class="lbrow you"><span class="n">' + L.you.n + '</span><span class="nm">' + esc(L.you.name) + ' (YOU)</span><span class="rk">' + rankLabel(L.you.rp) + '</span><span class="rp">' + L.you.rp + '</span></div>';
+    h += '</div><div class="foot"><span>Win = +40 RP, top 3 = +20, each kill = +3</span><span>Solo and Squad ranks are separate</span></div></div>';
+    openSheet(h);
+  }
+
   function findPerson(name) {
     if (name === user.name) return null;
     var p = null;
@@ -366,6 +484,8 @@
     if (!p && social.guild) social.guild.members.forEach(function (m) { if (m.name === name) p = { name: m.name, level: m.level }; });
     return p || { name: name };
   }
+
+  function rankChip(lab, rp) { var r = rankOf(rp); return '<div class="rkb" style="--c:' + r.color + '"><i></i><div><small>' + lab + ' RANK</small>' + r.name + (r.sub ? ' ' + r.sub : '') + '</div></div>'; }
 
   function openProfile(p) {
     var me = !p, d, name, color, lvl, likes, st, bg = null;
@@ -397,6 +517,7 @@
       '<div class="pr"><div class="danger">' + shield + '<div class="dtx"><b style="color:#FF6B4A">' + dg.tier + '</b><small>DANGER LEVEL ' + dg.pct + '%</small><div class="dbar"><i style="width:' + dg.pct + '%"></i></div></div></div>' +
       '<div class="likes">' + heart + '<div><b>' + fmt(likes) + '</b><small>' + (me ? 'LIKES RECEIVED' : 'LIKES') + '</small></div>' + likeBtn + '</div>' +
       '<div class="sgrid">' + stats.map(function (x) { return '<div class="st3"><b>' + x[1] + '</b><small>' + x[0] + '</small></div>'; }).join('') + '</div>' +
+      '<div class="rkrow">' + rankChip('SOLO', me ? user.rp.solo : rpOther(name, 'solo')) + rankChip('SQUAD', me ? user.rp.squad : rpOther(name, 'squad')) + '</div>' +
       '<div class="grow"><i></i>' + gtxt + '<span>' + (inG ? 'MEMBER' : '') + '</span></div>' +
       '<div class="brow">' + btns + '</div></div></div>';
     openSheet(h);
@@ -406,6 +527,16 @@
     var t = e.target.closest('[data-a]'); if (!t || t.disabled) return;
     var a = t.dataset.a, n = t.dataset.n, f, i;
     if (a === 'close') closeSheet();
+    else if (a === 'rtab') { rtab = t.dataset.t; openRanks(); }
+    else if (a === 'mtab') { mtab = t.dataset.t; openMissions(); }
+    else if (a === 'claim') {
+      var lst = t.dataset.w === 'daily' ? DAILY : WEEKLY, st = t.dataset.w === 'daily' ? user.missions.d : user.missions.w;
+      lst.forEach(function (x) {
+        if (x.id !== t.dataset.id) return; var q = st[x.id];
+        if (q.p >= x.goal && !q.c) { q.c = true; user.coins += x.coins; user.gems += (x.gems || 0); saveUser(); renderProfile(); VR.ui.toast('Reward claimed: +' + x.coins + ' coins' + (x.gems ? ' +' + x.gems + ' diamonds' : '')); }
+      });
+      openMissions();
+    }
     else if (a === 'tab') { ftab = t.dataset.t; openFriends(); }
     else if (a === 'prof') openProfile(findPerson(n));
     else if (a === 'invite') { inviteFriend(n); if (t.dataset.from === 'prof') closeSheet(); }
@@ -506,6 +637,8 @@
     $('meBtn').addEventListener('click', function () { openProfile(null); });
     $('friendsBtn').addEventListener('click', function () { ftab = social.requests.length ? 'requests' : 'friends'; openFriends(); });
     $('guildBtn').addEventListener('click', openGuild);
+    $('missionBtn').addEventListener('click', openMissions);
+    $('ranksBtn').addEventListener('click', openRanks);
     $('codeBtn').addEventListener('click', function () { copyText(code, 'Team code ' + code + ' copied'); });
     $('enterBtn').addEventListener('click', openEnterCode);
     $('modeBtn').addEventListener('click', function () {
