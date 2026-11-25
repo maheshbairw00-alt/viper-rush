@@ -63,14 +63,14 @@
   <!-- 3. LOBBY -->
   <section id="lobby" class="screen">
     <header class="top">
-      <div class="me">
+      <button class="me" id="meBtn" type="button" aria-label="My profile">
         <div class="dp" id="meDp">P</div>
-        <div class="meinfo"><b id="meName">PLAYER</b><div class="xp"><i></i></div></div>
+        <div class="meinfo"><b id="meName">PLAYER</b><div class="xp"><i id="meXp"></i></div></div>
         <span class="lv" id="meLv">LV 1</span>
-      </div>
+      </button>
       <div class="chips">
-        <span class="chip" id="coins">COINS 0</span>
-        <span class="chip cy" id="gems">GEMS 0</span>
+        <button class="chip coin" id="coinChip" type="button" aria-label="Viper coins"><svg class="ico"><use href="#icoV"/></svg><b id="coins">0</b><i class="plus">+</i></button>
+        <button class="chip coin" id="gemChip" type="button" aria-label="Diamonds"><svg class="ico"><use href="#icoD"/></svg><b id="gems">0</b><i class="plus">+</i></button>
       </div>
       <button class="round" id="settingsBtn" type="button" aria-label="Settings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
@@ -78,25 +78,33 @@
     </header>
 
     <aside class="left">
-      <button class="side" id="chatBtn" type="button">CHAT</button>
-      <button class="side" id="friendsBtn" type="button">FRIENDS</button>
-      <button class="mic" id="micBtn" type="button" aria-pressed="false"><span>MIC</span></button>
-      <small id="micLabel">Mic off</small>
+      <div class="teambox" id="teamBox">
+        <button class="tcode" id="codeBtn" type="button"><small>TEAM CODE</small><b id="codeText">-----</b></button>
+        <button class="enter" id="enterBtn" type="button">ENTER CODE</button>
+      </div>
+      <button class="side" type="button" data-soon="Events"><i class="dot" style="--c:#FF7AD9"></i><span>EVENTS</span></button>
+      <button class="side" type="button" data-soon="Reward"><i class="dot" style="--c:#FFD23F"></i><span>REWARD</span></button>
+      <button class="side" type="button" data-soon="Mail"><i class="dot" style="--c:#7DE8FF"></i><span>MAIL</span></button>
+      <button class="side" id="ranksBtn" type="button"><i class="dot" style="--c:#7CFFB2"></i><span>RANKS</span></button>
     </aside>
 
-    <main class="slots" id="slots" aria-label="Squad"></main>
+    <main class="stage" id="slots" aria-label="Squad"></main>
 
     <aside class="right">
+      <button class="side fr" id="friendsBtn" type="button"><i class="dot" style="--c:#7CFF8A"></i><span>FRIENDS</span><em class="badge" id="frBadge"></em></button>
+      <button class="side" id="guildBtn" type="button"><i class="dot" style="--c:#FFB11F"></i><span>GUILD</span></button>
+      <button class="side" type="button" data-soon="Clan War"><i class="dot" style="--c:#FF7AD9"></i><span>CLAN WAR</span></button>
+      <button class="side" type="button" data-soon="Custom Room"><i class="dot" style="--c:#7DE8FF"></i><span>CUSTOM ROOM</span></button>
       <button class="mode" id="modeBtn" type="button">MODE: SQUAD</button>
-      <button class="code" id="codeBtn" type="button"><small>INVITE CODE</small><b id="codeText">-----</b></button>
       <button class="start" id="startBtn" type="button">START</button>
     </aside>
 
     <nav class="bottom">
       <button type="button" class="nav" data-soon="Store">STORE</button>
       <button type="button" class="nav" data-soon="Skins">SKINS</button>
-      <button type="button" class="nav" data-soon="Missions">MISSIONS</button>
-      <button type="button" class="nav" data-soon="Settings" id="navSettings">SETTINGS</button>
+      <button type="button" class="nav" id="missionBtn">MISSIONS<i class="rdot" id="missionDot"></i></button>
+      <button type="button" class="nav" id="chatBtn">CHAT</button>
+      <button type="button" class="nav" id="navSettings">SETTINGS</button>
     </nav>
   </section>
 
@@ -108,19 +116,26 @@
       <div class="pills">
         <div class="pill"><span>LENGTH</span><b id="hudLen">0</b></div>
         <div class="pill cy"><span>KILLS</span><b id="hudKills">0</b></div>
+        <div class="pill pk"><span>ALIVE</span><b id="hudAlive">0</b></div>
+        <div class="pill gd"><span>TIME</span><b id="hudTime">6:00</b></div>
       </div>
-      <canvas id="mini" width="160" height="160"></canvas>
+      <canvas id="mini" width="240" height="240"></canvas>
+      <div class="zonetag" id="zoneTag"></div>
+      <div class="fxbar" id="fxBar"></div>
+      <div class="banner" id="banner"></div>
       <button class="round pause" id="pauseBtn" type="button" aria-label="Pause">II</button>
       <button class="round gmic" id="gMic" type="button">MIC</button>
       <div class="squadbar" id="squadBar"></div>
       <div class="stick" id="stick"><i id="knob"></i></div>
       <button class="boost" id="boostBtn" type="button">BOOST</button>
     </div>
+    <div class="overlay" id="bigMap"><div class="mapbox"><canvas id="bigMapCv" width="560" height="560"></canvas><p>Tap anywhere to close</p></div></div>
     <div class="overlay" id="result">
-      <div class="card">
-        <h2>YOU DIED</h2>
+      <div class="card" id="resCard">
+        <h2 id="resTitle">YOU DIED</h2>
         <p class="big" id="resScore">0</p>
         <p id="resInfo">Rank 1  |  Kills 0</p>
+        <p class="rew" id="resRewards"></p>
         <div class="row">
           <button class="primary" id="againBtn" type="button">PLAY AGAIN</button>
           <button class="ghost" id="lobbyBtn" type="button">LOBBY</button>
@@ -138,12 +153,26 @@
     </div>
   </section>
 
+  <!-- icon sprite -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <linearGradient id="gRim" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFF3A8"/><stop offset=".5" stop-color="#E59400"/><stop offset="1" stop-color="#FFD84A"/></linearGradient>
+      <radialGradient id="gGold" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#FFF6B8"/><stop offset=".35" stop-color="#FFD23F"/><stop offset=".75" stop-color="#E69A00"/><stop offset="1" stop-color="#B26A00"/></radialGradient>
+    </defs>
+    <symbol id="icoV" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="url(#gRim)" stroke="#8A4B00" stroke-width="3"/><circle cx="50" cy="50" r="39" fill="url(#gGold)" stroke="#B26A00" stroke-width="2"/><g transform="translate(50 56) scale(.74)"><path d="M -26 -24 L -6 26 L 6 26 L 26 -24 L 12 -24 L 0 10 L -12 -24 Z" fill="#7A3E00"/><ellipse cx="0" cy="-33" rx="9" ry="7" fill="#7A3E00"/><circle cx="-3.4" cy="-34" r="1.9" fill="#FFE45C"/><circle cx="3.4" cy="-34" r="1.9" fill="#FFE45C"/></g></symbol>
+    <symbol id="icoD" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="url(#gRim)" stroke="#8A4B00" stroke-width="3"/><circle cx="50" cy="50" r="39" fill="url(#gGold)" stroke="#B26A00" stroke-width="2"/><g transform="translate(50 52) scale(.74)"><path d="M -26 -8 L -14 -28 L 14 -28 L 26 -8 L 0 30 Z" fill="#5BE3FF" stroke="#0B4F6C" stroke-width="4" stroke-linejoin="round"/><path d="M -26 -8 H 26 M -14 -28 L -7 -8 L 0 -28 L 7 -8 L 14 -28 M -7 -8 L 0 30 L 7 -8" fill="none" stroke="#0B4F6C" stroke-width="2.2" stroke-linejoin="round"/><path d="M -12 -25 L -6 -10 L -20 -10 Z" fill="#fff" fill-opacity=".7"/></g></symbol>
+    <symbol id="icoMic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="icoSnd" viewBox="0 0 24 24"><path d="M3 9.5h4l5-4v13l-5-4H3z" fill="currentColor"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="icoSndOff" viewBox="0 0 24 24"><path d="M3 9.5h4l5-4v13l-5-4H3z" fill="currentColor"/><path d="M16 9l5 6M21 9l-5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  </svg>
+
   <!-- shared UI -->
   <aside class="chat" id="chat" aria-label="Squad chat">
     <div class="chat-head"><b>SQUAD CHAT</b><button type="button" id="chatClose" class="x" aria-label="Close chat">X</button></div>
     <div class="chat-list" id="chatList"></div>
     <form class="chat-form" id="chatForm"><input id="chatInput" type="text" maxlength="80" placeholder="Type a message" autocomplete="off"><button type="submit">SEND</button></form>
   </aside>
+  <div class="sheet" id="sheet"><div class="pbox" id="pbox"></div></div>
   <div class="modal" id="modal" role="dialog" aria-modal="true"><div class="box" id="modalBox"></div></div>
   <div class="toast" id="toast" role="status"></div>
   <div class="rotate" id="rotate"><p>Rotate your phone</p><span>Viper Rush plays in landscape</span></div>
