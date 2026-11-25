@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0E0A2B">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Viper Rush</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- animated background (shared by loading, login, lobby) -->
+  <div id="bgwrap" class="bgwrap" aria-hidden="true">
+    <div class="aura"></div>
+    <div class="rays"></div>
+    <div class="hex"></div>
+    <canvas id="bg"></canvas>
+    <div class="vignette"></div>
+  </div>
+
+  <!-- 1. LOADING -->
+  <section id="loading" class="screen">
+    <div class="load-box">
+      <img class="logo" src="assets/logo.png" alt="Viper Rush" width="640" height="640">
+      <p class="tag">SQUAD UP • SLITHER • SURVIVE</p>
+      <div class="bar"><i id="barFill"></i></div>
+      <div class="bar-row"><span id="tip">Loading…</span><b id="pct">0%</b></div>
+    </div>
+  </section>
+
+  <!-- 2. LOGIN -->
+  <section id="login" class="screen">
+    <div class="login-left">
+      <div class="logo-wrap"><img class="logo" src="assets/logo.png" alt="Viper Rush" width="640" height="640"></div>
+      <p class="tag">SQUAD UP • SLITHER • SURVIVE</p>
+    </div>
+    <div class="login-right">
+      <div class="actions">
+        <button class="btn google" type="button" data-provider="google">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.31 24 12 24z"/><path fill="#FBBC05" d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.98 3.09C6.22 6.86 8.87 4.75 12 4.75z"/></svg>
+          <span class="lbl">Continue with Google</span>
+        </button>
+        <button class="btn facebook" type="button" data-provider="facebook">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M13.5 21v-7.5h2.5l.5-3h-3V8.6c0-.9.3-1.5 1.6-1.5h1.5V4.4c-.3 0-1.2-.1-2.2-.1-2.2 0-3.7 1.3-3.7 3.8v2.4H8v3h2.7V21h2.8z"/></svg>
+          <span class="lbl">Continue with Facebook</span>
+        </button>
+        <button class="btn guest" type="button" data-provider="guest">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#B6FF3B" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+          <span class="lbl">Play as Guest</span>
+        </button>
+      </div>
+      <p class="legal">By continuing you agree to the Terms of Service and Privacy Policy.</p>
+    </div>
+    <span class="ver">V1.0.0</span>
+  </section>
+
+  <!-- 3. LOBBY -->
+  <section id="lobby" class="screen">
+    <header class="top">
+      <div class="me">
+        <div class="dp" id="meDp">P</div>
+        <div class="meinfo"><b id="meName">PLAYER</b><div class="xp"><i></i></div></div>
+        <span class="lv" id="meLv">LV 1</span>
+      </div>
+      <div class="chips">
+        <span class="chip" id="coins">COINS 0</span>
+        <span class="chip cy" id="gems">GEMS 0</span>
+      </div>
+      <button class="round" id="settingsBtn" type="button" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </button>
+    </header>
+
+    <aside class="left">
+      <button class="side" id="chatBtn" type="button">CHAT</button>
+      <button class="side" id="friendsBtn" type="button">FRIENDS</button>
+      <button class="mic" id="micBtn" type="button" aria-pressed="false"><span>MIC</span></button>
+      <small id="micLabel">Mic off</small>
+    </aside>
+
+    <main class="slots" id="slots" aria-label="Squad"></main>
+
+    <aside class="right">
+      <button class="mode" id="modeBtn" type="button">MODE: SQUAD</button>
+      <button class="code" id="codeBtn" type="button"><small>INVITE CODE</small><b id="codeText">-----</b></button>
+      <button class="start" id="startBtn" type="button">START</button>
+    </aside>
+
+    <nav class="bottom">
+      <button type="button" class="nav" data-soon="Store">STORE</button>
+      <button type="button" class="nav" data-soon="Skins">SKINS</button>
+      <button type="button" class="nav" data-soon="Missions">MISSIONS</button>
+      <button type="button" class="nav" data-soon="Settings" id="navSettings">SETTINGS</button>
+    </nav>
+  </section>
+
+  <!-- 4. GAME -->
+  <section id="game" class="screen">
+    <canvas id="gameCanvas"></canvas>
+    <div class="hud">
+      <div class="lb" id="lb"></div>
+      <div class="pills">
+        <div class="pill"><span>LENGTH</span><b id="hudLen">0</b></div>
+        <div class="pill cy"><span>KILLS</span><b id="hudKills">0</b></div>
+      </div>
+      <canvas id="mini" width="160" height="160"></canvas>
+      <button class="round pause" id="pauseBtn" type="button" aria-label="Pause">II</button>
+      <button class="round gmic" id="gMic" type="button">MIC</button>
+      <div class="squadbar" id="squadBar"></div>
+      <div class="stick" id="stick"><i id="knob"></i></div>
+      <button class="boost" id="boostBtn" type="button">BOOST</button>
+    </div>
+    <div class="overlay" id="result">
+      <div class="card">
+        <h2>YOU DIED</h2>
+        <p class="big" id="resScore">0</p>
+        <p id="resInfo">Rank 1  |  Kills 0</p>
+        <div class="row">
+          <button class="primary" id="againBtn" type="button">PLAY AGAIN</button>
+          <button class="ghost" id="lobbyBtn" type="button">LOBBY</button>
+        </div>
+      </div>
+    </div>
+    <div class="overlay" id="pauseBox">
+      <div class="card">
+        <h2>PAUSED</h2>
+        <div class="row">
+          <button class="primary" id="resumeBtn" type="button">RESUME</button>
+          <button class="ghost" id="quitBtn" type="button">QUIT</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- shared UI -->
+  <aside class="chat" id="chat" aria-label="Squad chat">
+    <div class="chat-head"><b>SQUAD CHAT</b><button type="button" id="chatClose" class="x" aria-label="Close chat">X</button></div>
+    <div class="chat-list" id="chatList"></div>
+    <form class="chat-form" id="chatForm"><input id="chatInput" type="text" maxlength="80" placeholder="Type a message" autocomplete="off"><button type="submit">SEND</button></form>
+  </aside>
+  <div class="modal" id="modal" role="dialog" aria-modal="true"><div class="box" id="modalBox"></div></div>
+  <div class="toast" id="toast" role="status"></div>
+  <div class="rotate" id="rotate"><p>Rotate your phone</p><span>Viper Rush plays in landscape</span></div>
+</div>
+
+<!--
+  OPTIONAL: real Google / Facebook login with Firebase.
+  1) Create a Firebase project, enable Authentication > Google and Facebook.
+  2) Paste your Firebase config into js/config.js (firebase: {...}).
+  3) Uncomment these two lines.
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+-->
+
+<script src="js/config.js"></script>
+<script src="js/background.js"></script>
+<script src="js/voice.js"></script>
+<script src="js/login.js"></script>
+<script src="js/lobby.js"></script>
+<script src="js/game.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
