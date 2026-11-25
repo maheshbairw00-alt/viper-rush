@@ -1,0 +1,541 @@
+/* js/lobby.js
+ * Lobby screen: profile bar, squad of 5 (you + 4 friends), team code, friends list,
+ * guild (50 members), profile cards with likes + danger rating, mic / sound, mode, START.
+ *
+ * OFFLINE NOW: friends, requests, guild members and teammates are demo data saved in this
+ * phone's localStorage, so you can try the full flow. Teammates are bots.
+ * MULTIPLAYER LATER: look for the "NETWORK HOOK" comments and replace them with calls to your
+ * server (create party, join with code, friend request, accept, invite, like, guild).
+ *
+ * API:  VR.lobby.init()   VR.lobby.enter(user)   VR.lobby.refresh()   VR.lobby.recordGame(result)
+ */
+(function () {
+  var NAMES = ['Rudra', 'Kabir', 'Zoya', 'Arjun', 'Naga', 'Vyom', 'Mira', 'Tej', 'Ishaan', 'Rhea', 'Dev', 'Anaya', 'Kavya', 'Veer', 'Sia', 'Aarav'];
+  // skin colours: [light, dark]
+  var COLS = [['#C6FF4D', '#10B981'], ['#7DE8FF', '#2563EB'], ['#FF9AD5', '#BE185D'], ['#FFC36B', '#EA580C'], ['#D8B4FE', '#7C3AED'], ['#CBD5E1', '#64748B']];
+  var SIZE = VR_CONFIG.squadSize || 5;
+  var GUILD_MAX = 50;
+  var user = null, squad = [], mode = 'squad', code = '', raf = 0, soundOn = true, social = null;
+  var sheet = '', ftab = 'friends', sv = 0;
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function hash(s) { var h = 7; s = String(s); for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; }
+  function fmt(n) { return Number(n).toLocaleString('en-US'); }
+  function newCode() {
+    var c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', s = '';
+    for (var i = 0; i < 5; i++) s += c[Math.floor(Math.random() * c.length)];
+    return s;
+  }
+  function randName() {
+    var used = squad.filter(Boolean).map(function (m) { return m.name; });
+    var pool = NAMES.filter(function (n) { return used.indexOf(n) < 0; });
+    return pool[Math.floor(Math.random() * pool.length)] || 'Player';
+  }
+  function copyText(t, msg) {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(function () { VR.ui.toast(msg); }, function () { VR.ui.toast(t); });
+    else VR.ui.toast(t);
+  }
+  function squadCount() { return squad.filter(Boolean).length; }
+  function inSquad(name) { return squad.some(function (m) { return m && m.name === name; }); }
+
+  /* ---------- saved social data (friends, requests, guild) ---------- */
+  function makeGuild(me) {
+    var pool = ['Raja_X', 'Naga', 'Sia', 'Mira', 'Rexx', 'Kaal', 'Vyom', 'Tej', 'Ishaan', 'Rhea', 'Dev', 'Anaya', 'Kavya', 'Veer', 'Aarav', 'Rudra', 'Kabir', 'Zoya', 'Arjun', 'Neel', 'Yash', 'Pari', 'Om', 'Riya', 'Aditya', 'Sana', 'Jay', 'Isha', 'Lakshya', 'Mohit', 'Tara', 'Vihaan', 'Nisha', 'Parth', 'Ria', 'Sahil'];
+    var m = pool.map(function (n, i) { return { name: n, role: i === 0 ? 'LEADER' : (i < 4 ? 'ELDER' : 'MEMBER'), level: 6 + hash(n) % 40, online: hash(n) % 3 !== 0 }; });
+    m.splice(5, 0, { name: me, role: 'MEMBER', you: true, online: true }); // 36 + you = 37
+    return { name: 'VIPER KINGS', id: 'VK-2048', level: 5, members: m };
+  }
+  function loadSocial() {
+    var d = null;
+    try { d = JSON.parse(localStorage.getItem('vr_social_' + user.id)); } catch (e) { d = null; }
+    if (!d || !d.friends) {
+      d = {
+        friends: [
+          { name: 'Sia', level: 21, status: 'online', color: 2 },
+          { name: 'Mira', level: 9, status: 'online', color: 4 },
+          { name: 'Rexx', level: 15, status: 'match', color: 3 },
+          { name: 'Kaal', level: 33, status: 'offline', color: 5 }
+        ],
+        requests: [{ name: 'Rudra', level: 14, color: 1 }, { name: 'Zoya', level: 6, color: 2 }],
+        sent: {}, liked: {}, guild: makeGuild(user.name)
+      };
+    }
+    social = d;
+  }
+  function saveSocial() { try { localStorage.setItem('vr_social_' + user.id, JSON.stringify(social)); } catch (e) {} }
+  function isFriend(name) { return social.friends.some(function (f) { return f.name === name; }); }
+
+  /* ---------- player stats, danger rating ---------- */
+  function initUser() {
+    user.stats = user.stats || { wins: 0, kills: 0, best: 0, matches: 0, bestRank: 0 };
+    user.likes = user.likes || 0;
+    user.xp = user.xp || 0;
+    user.skin = user.skin || 0;
+    user.level = Math.max(user.level || 1, 1 + Math.floor(user.xp / 500));
+    user.coins = user.coins == null ? 500 : user.coins;
+    user.gems = user.gems == null ? 20 : user.gems;
+  }
+  function otherData(p) {
+    var h = hash(p.name), lv = p.level || (3 + h % 30);
+    var matches = 10 + lv * 14 + h % 40;
+    return {
+      stats: {
+        matches: matches, wins: Math.round(matches * (.05 + (h % 25) / 100)), kills: Math.round(matches * (1.2 + (h % 30) / 10)),
+        best: 800 + lv * 700 + h % 3000, bestRank: 1 + h % 200
+      },
+      likes: 50 + lv * 40 + h % 900 + (social.liked[p.name] ? 1 : 0), level: lv
+    };
+  }
+  function danger(s) {
+    var score = s.kills * 3 + s.wins * 20 + Math.floor(s.best / 100);
+    var pct = Math.min(99, Math.round(score / (score + 3000) * 100));
+    var tier = pct < 25 ? 'ROOKIE' : pct < 50 ? 'HUNTER' : pct < 75 ? 'PREDATOR' : 'VIPER KING';
+    return { pct: pct, tier: tier };
+  }
+  function userId() {
+    var n = String(hash(user.id) * 7919 % 10000000000); while (n.length < 10) n = '0' + n;
+    return n.slice(0, 4) + ' ' + n.slice(4, 8) + ' ' + n.slice(8);
+  }
+  function recordGame(g) {
+    if (!user) return;
+    var s = user.stats;
+    s.matches++; s.kills += g.kills; s.best = Math.max(s.best, g.score);
+    if (g.rank === 1) s.wins++;
+    s.bestRank = s.bestRank ? Math.min(s.bestRank, g.rank) : g.rank;
+    user.xp += Math.floor(g.score / 10) + g.kills * 5;
+    user.level = 1 + Math.floor(user.xp / 500);
+    user.coins += Math.floor(g.score / 40);
+    if (VR.auth && VR.auth.user === user) VR.auth.save();
+  }
+
+  /* ---------- snake picture for the lobby stage ---------- */
+  function snakeSVG(ci) {
+    var c = COLS[ci % COLS.length], id = 'sg' + (++sv), s = '';
+    s += '<svg class="snk" viewBox="-130 -215 260 245" aria-hidden="true"><defs>' +
+      '<linearGradient id="' + id + '" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="' + c[0] + '"/><stop offset="1" stop-color="' + c[1] + '"/></linearGradient>' +
+      '<radialGradient id="' + id + 'p"><stop offset="0" stop-color="#FFE9A8" stop-opacity=".9"/><stop offset=".6" stop-color="#FFB11F" stop-opacity=".5"/><stop offset="1" stop-color="#FFB11F" stop-opacity="0"/></radialGradient>' +
+      '<radialGradient id="' + id + 'a"><stop offset="0" stop-color="#fff" stop-opacity=".5"/><stop offset=".45" stop-color="' + c[0] + '" stop-opacity=".3"/><stop offset="1" stop-color="' + c[0] + '" stop-opacity="0"/></radialGradient></defs>';
+    s += '<circle cx="8" cy="-100" r="110" fill="url(#' + id + 'a)"/>';
+    s += '<ellipse cx="0" cy="6" rx="120" ry="22" fill="url(#' + id + 'p)"/><ellipse cx="0" cy="6" rx="94" ry="15" fill="none" stroke="#FFF3B0" stroke-opacity=".8" stroke-width="2"/>';
+    [[-12, 70, 16, 26], [-36, 56, 14, 24], [-58, 42, 12, 22]].forEach(function (q) {
+      s += '<ellipse cx="0" cy="' + q[0] + '" rx="' + q[1] + '" ry="' + q[2] + '" fill="none" stroke="#0B2B1A" stroke-opacity=".35" stroke-width="' + (q[3] + 4) + '"/>' +
+        '<ellipse cx="0" cy="' + q[0] + '" rx="' + q[1] + '" ry="' + q[2] + '" fill="none" stroke="url(#' + id + ')" stroke-width="' + q[3] + '"/>' +
+        '<ellipse cx="0" cy="' + (q[0] - 3) + '" rx="' + q[1] + '" ry="' + q[2] + '" fill="none" stroke="#fff" stroke-opacity=".25" stroke-width="4" stroke-dasharray="26 18"/>';
+    });
+    var d = 'M -14 -62 C -16 -104, 34 -112, 22 -152';
+    s += '<path d="' + d + '" fill="none" stroke="#0B2B1A" stroke-opacity=".35" stroke-width="36" stroke-linecap="round"/>' +
+      '<path d="' + d + '" fill="none" stroke="url(#' + id + ')" stroke-width="32" stroke-linecap="round"/>' +
+      '<path d="' + d + '" fill="none" stroke="#fff" stroke-opacity=".3" stroke-width="5" stroke-linecap="round" transform="translate(-7 0)"/>' +
+      '<ellipse cx="22" cy="-172" rx="38" ry="32" fill="url(#' + id + ')" stroke="#0B2B1A" stroke-opacity=".6" stroke-width="3"/>' +
+      '<ellipse cx="14" cy="-184" rx="16" ry="8" fill="#fff" fill-opacity=".3"/>';
+    [-1, 1].forEach(function (sx) {
+      s += '<ellipse cx="' + (22 + sx * 14) + '" cy="-176" rx="10" ry="11" fill="#fff"/><circle cx="' + (22 + sx * 14 + 1.5) + '" cy="-175" r="5" fill="#101530"/><circle cx="' + (22 + sx * 14 + 3) + '" cy="-177" r="1.8" fill="#fff"/>';
+    });
+    s += '<path d="M22 -146 v12 l-5 6 m5 -6 l5 6" stroke="#FF3B5C" stroke-width="3" fill="none" stroke-linecap="round"/></svg>';
+    return s;
+  }
+
+  /* ---------- lobby rendering ---------- */
+  function renderProfile() {
+    $('meDp').textContent = (user.name || 'P').charAt(0).toUpperCase();
+    $('meName').textContent = user.name;
+    $('meLv').textContent = 'LV ' + user.level;
+    $('meXp').style.width = ((user.xp % 500) / 5) + '%';
+    $('coins').textContent = fmt(user.coins);
+    $('gems').textContent = fmt(user.gems);
+    $('codeText').textContent = code;
+    $('modeBtn').textContent = 'MODE: ' + mode.toUpperCase();
+    $('lobby').classList.toggle('solo', mode === 'solo');
+    var n = social ? social.requests.length : 0;
+    $('frBadge').textContent = n ? n : '';
+  }
+
+  function order() { // you in the middle, friends on both sides
+    var l = [], r = [];
+    for (var i = 1; i < SIZE; i++) (i % 2 ? l : r).push(i);
+    return l.reverse().concat([0], r);
+  }
+
+  function renderSlots() {
+    var box = $('slots'), n = squadCount(), html = '';
+    box.style.setProperty('--sw', n <= 1 ? 36 : n === 2 ? 32 : n === 3 ? 28 : n === 4 ? 24 : 21);
+    order().forEach(function (i) {
+      var m = squad[i];
+      if (i === 0) {
+        html += '<div class="slot you"><button class="who" type="button" data-act="who" data-i="0">' + snakeSVG(user.skin) +
+          '<span class="ntag"><em>LV ' + user.level + '</em><span>' + esc(user.name) + '</span></span></button>' +
+          '<div class="ms"><button class="pillb" id="micBtn" type="button" data-act="mic" aria-pressed="false"><svg><use href="#icoMic"/></svg>MIC</button>' +
+          '<button class="pillb" id="sndBtn" type="button" data-act="snd"><svg><use href="#icoSnd"/></svg>SOUND</button></div></div>';
+      } else if (m) {
+        var add = '';
+        if (!isFriend(m.name)) {
+          if (social.sent[m.name]) add = '<span class="addf pend" title="Request sent">...</span>';
+          else add = '<button class="addf" type="button" data-act="addf" data-i="' + i + '" aria-label="Add friend">+</button><span class="tip">ADD FRIEND</span>';
+        } else add = '<span class="addf done">&#10003;</span>';
+        html += '<div class="slot member" style="animation-delay:' + (i * .5) + 's"><button class="who" type="button" data-act="who" data-i="' + i + '">' + snakeSVG(m.color == null ? hash(m.name) % 5 : m.color) +
+          '</button><div class="tagrow"><span class="ntag"><em>LV ' + (m.level || 1) + '</em><span>' + esc(m.name) + '</span></span>' + add + '</div></div>';
+      } else if (mode === 'squad') {
+        html += '<button class="slot empty" type="button" data-act="ghost" data-i="' + i + '" aria-label="Invite"><span class="gp">+</span><small>INVITE</small></button>';
+      }
+    });
+    box.innerHTML = html;
+    renderMic(); renderSound();
+  }
+
+  function micAnim() {
+    var btn = $('micBtn');
+    if (btn && VR.voice.isOn()) { btn.style.setProperty('--lvl', VR.voice.level().toFixed(2)); raf = requestAnimationFrame(micAnim); }
+    else if (btn) btn.style.setProperty('--lvl', 0);
+  }
+  function renderMic() {
+    var on = VR.voice.isOn(), b = $('micBtn');
+    if (b) { b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+    var g = $('gMic'); if (g) g.classList.toggle('on', on);
+    cancelAnimationFrame(raf); if (on) micAnim();
+  }
+  function renderSound() {
+    var b = $('sndBtn'); if (!b) return;
+    b.classList.toggle('off', !soundOn);
+    b.querySelector('use').setAttribute('href', soundOn ? '#icoSnd' : '#icoSndOff');
+  }
+
+  function toggleMic() {
+    VR.voice.toggle().then(function (on) {
+      if (!on) VR.ui.toast('Allow microphone access to use voice chat');
+      renderMic();
+    });
+  }
+  function toggleSound() {
+    soundOn = !soundOn; VR.sound = soundOn; // NETWORK HOOK: mute incoming squad voice here
+    renderSound(); VR.ui.toast(soundOn ? 'Sound on - you can hear your squad' : 'Sound off');
+  }
+
+  /* ---------- squad actions ---------- */
+  function freeSlot() { for (var i = 1; i < SIZE; i++) if (!squad[i]) return i; return -1; }
+  function addToSquad(p, msg) {
+    var i = freeSlot();
+    if (i < 0) { VR.ui.toast('Squad is full (' + SIZE + '/' + SIZE + ')'); return false; }
+    mode = 'squad';
+    squad[i] = { name: p.name, level: p.level || (3 + hash(p.name) % 30), color: p.color == null ? hash(p.name) % 5 : p.color, bot: true };
+    renderProfile(); renderSlots();
+    if (msg) VR.ui.toast(msg);
+    if (sheet === 'friends') openFriends();
+    return true;
+  }
+
+  function openInvite() {
+    VR.ui.modal({
+      title: 'INVITE TO SQUAD',
+      html: '<p>Invite a friend, or share your team code</p><div class="codebig">' + esc(code) + '</div>',
+      actions: [
+        { label: 'FRIENDS', primary: true, onClick: function () { openFriends(); } },
+        { label: 'COPY CODE', keepOpen: true, onClick: function () { copyText(code, 'Team code copied'); } },
+        // NETWORK HOOK: remove this test button when real players can join with the code.
+        { label: 'ADD TEST PLAYER', onClick: function () { var n = randName(); addToSquad({ name: n }, n + ' joined with team code ' + code); } },
+        { label: 'CLOSE' }
+      ]
+    });
+  }
+
+  function openEnterCode() {
+    VR.ui.modal({
+      title: 'ENTER TEAM CODE',
+      html: '<p>Type your friend\'s 5 letter team code</p><input id="mIn" class="mi up" type="text" maxlength="5" placeholder="XXXXX" autocomplete="off" autocapitalize="characters">',
+      actions: [
+        { label: 'JOIN', primary: true, keepOpen: true, onClick: function () {
+          var v = ($('mIn').value || '').trim().toUpperCase();
+          if (v.length !== 5) return VR.ui.toast('A team code has 5 letters or numbers');
+          if (v === code) return VR.ui.toast('That is your own team code');
+          VR.ui.closeModal(); joinTeam(v);
+        } },
+        { label: 'CANCEL' }
+      ]
+    });
+  }
+  function joinTeam(v) {
+    // NETWORK HOOK: ask your server to put this player into the lobby that owns code v.
+    // OFFLINE DEMO: you land in a demo lobby with the code owner.
+    var host = randName();
+    code = v; mode = 'squad';
+    squad = [{ name: user.name, you: true }]; for (var i = 1; i < SIZE; i++) squad.push(null);
+    squad[1] = { name: host, level: 3 + hash(host) % 30, color: hash(host) % 5, bot: true };
+    renderProfile(); renderSlots();
+    VR.ui.toast('You joined ' + host + '\'s team (' + v + ')');
+  }
+
+  function sendRequest(p) {
+    if (!p || isFriend(p.name) || social.sent[p.name]) return;
+    // NETWORK HOOK: send a friend request to p on the server.
+    social.sent[p.name] = true; saveSocial(); renderSlots();
+    VR.ui.toast('Friend request sent to ' + p.name);
+    setTimeout(function () { // OFFLINE DEMO: the other player accepts after a moment
+      if (!social.sent[p.name]) return;
+      delete social.sent[p.name];
+      social.friends.push({ name: p.name, level: p.level || 5, status: 'online', color: p.color == null ? hash(p.name) % 5 : p.color });
+      saveSocial(); renderSlots(); renderProfile();
+      VR.ui.toast(p.name + ' accepted - now your friend');
+      if (sheet === 'friends') openFriends();
+    }, 2200);
+  }
+
+  function inviteFriend(name) {
+    var f = social.friends.filter(function (x) { return x.name === name; })[0];
+    if (!f) return VR.ui.toast('Add ' + name + ' as a friend first');
+    if (f.status !== 'online' || inSquad(name)) return;
+    if (squadCount() >= SIZE) return VR.ui.toast('Squad is full (' + SIZE + '/' + SIZE + ')');
+    // NETWORK HOOK: send a squad invite to the friend; join when they accept.
+    VR.ui.toast('Invite sent to ' + name);
+    setTimeout(function () { if (!inSquad(name)) addToSquad(f, name + ' joined your squad'); }, 1200);
+  }
+
+  /* ---------- sheets (friends, guild, profile) ---------- */
+  function openSheet(html) { $('pbox').innerHTML = html; $('sheet').classList.add('on'); }
+  function closeSheet() { $('sheet').classList.remove('on'); sheet = ''; }
+  function head(title) { return '<div class="ph"><b>' + title + '</b><button class="px" type="button" data-a="close" aria-label="Close">X</button></div>'; }
+  function av(color, name) { return '<i class="av2" style="--c:' + COLS[(color == null ? hash(name) % 5 : color) % COLS.length][0] + '">' + esc(name.charAt(0).toUpperCase()) + '</i>'; }
+
+  function openFriends() {
+    sheet = 'friends';
+    var rq = social.requests.length;
+    var h = head('FRIENDS') + '<div class="pbody"><div class="tabs">' +
+      '<button class="tab' + (ftab === 'friends' ? ' on' : '') + '" type="button" data-a="tab" data-t="friends">FRIENDS ' + social.friends.length + '</button>' +
+      '<button class="tab' + (ftab === 'requests' ? ' on' : '') + '" type="button" data-a="tab" data-t="requests">REQUESTS ' + rq + (rq && ftab !== 'requests' ? '<em>' + rq + '</em>' : '') + '</button>' +
+      '<button class="tab' + (ftab === 'add' ? ' on' : '') + '" type="button" data-a="tab" data-t="add">ADD BY ID</button></div>';
+    if (ftab === 'friends') {
+      h += '<div class="flist">';
+      if (!social.friends.length) h += '<p class="empty-note">No friends yet. Tap + on a player in your lobby to add them.</p>';
+      social.friends.forEach(function (f) {
+        var st = f.status === 'online' ? 'Online' : f.status === 'match' ? 'In match' : 'Offline';
+        var btn;
+        if (inSquad(f.name)) btn = '<button class="gb gr" type="button" disabled>IN SQUAD</button>';
+        else if (f.status === 'online') btn = '<button class="gb" type="button" data-a="invite" data-n="' + esc(f.name) + '">INVITE</button>';
+        else btn = '<button class="gb dis" type="button" disabled>' + (f.status === 'match' ? 'IN MATCH' : 'OFFLINE') + '</button>';
+        h += '<div class="frow" data-a="prof" data-n="' + esc(f.name) + '">' + av(f.color, f.name) +
+          '<div class="fi"><b><span>' + esc(f.name) + '</span><em class="lvt">LV ' + f.level + '</em></b><small><i class="sd ' + f.status + '"></i>' + st + '</small></div>' + btn + '</div>';
+      });
+      h += '</div><div class="foot"><span>Friends ' + social.friends.length + ' / 100</span><span>Tap INVITE to call a friend into your squad</span></div>';
+    } else if (ftab === 'requests') {
+      h += '<div class="flist">';
+      if (!rq) h += '<p class="empty-note">No new requests</p>';
+      social.requests.forEach(function (r) {
+        h += '<div class="frow" data-a="prof" data-n="' + esc(r.name) + '">' + av(r.color, r.name) +
+          '<div class="fi"><b><span>' + esc(r.name) + '</span><em class="lvt">LV ' + r.level + '</em></b><small>wants to be your friend</small></div>' +
+          '<button class="gb gr" type="button" data-a="accept" data-n="' + esc(r.name) + '">ACCEPT</button>' +
+          '<button class="gb dis" type="button" data-a="decline" data-n="' + esc(r.name) + '">DECLINE</button></div>';
+      });
+      h += '</div>';
+    } else {
+      h += '<p class="empty-note" style="padding:0">Enter your friend\'s player ID (shown on their profile)</p>' +
+        '<div class="addid"><input id="mIdIn" class="mi" type="text" maxlength="12" placeholder="1234 5678 90" autocomplete="off" inputmode="numeric"><button class="gb" type="button" data-a="sendid">SEND REQUEST</button></div>' +
+        '<div class="foot"><span>Your ID: ' + userId() + '</span><button class="gb dis" type="button" data-a="copyid" style="min-width:0;height:calc(var(--u)*5)">COPY</button></div>';
+    }
+    openSheet(h + '</div>');
+  }
+
+  function guildHTML() {
+    var g = social.guild;
+    if (!g) {
+      return head('GUILD') + '<div class="pbody" style="align-items:center;text-align:center"><p class="empty-note">You are not in a guild.<br>Create your own, or join one with up to ' + GUILD_MAX + ' players.</p>' +
+        '<div class="brow" style="width:100%"><button class="gb" type="button" data-a="gcreate">CREATE GUILD</button><button class="gb gr" type="button" data-a="gjoin">JOIN VIPER KINGS</button></div></div>';
+    }
+    var h = head('GUILD') + '<div class="pbody gl"><div class="gside">' +
+      '<svg class="emblem" viewBox="0 0 100 112"><path d="M50 4 L92 16 V52 C92 80 74 96 50 108 C26 96 8 80 8 52 V16 Z" fill="#FFB11F" stroke="#fff" stroke-width="4"/><path d="M50 14 L82 23 V50 C82 72 68 85 50 95 C32 85 18 72 18 50 V23 Z" fill="#4B1FA8"/><g transform="translate(50 56) scale(.9)"><path d="M -26 -24 L -6 26 L 6 26 L 26 -24 L 12 -24 L 0 10 L -12 -24 Z" fill="#FFE45C"/><ellipse cx="0" cy="-33" rx="9" ry="7" fill="#FFE45C"/></g></svg>' +
+      '<h4>' + esc(g.name) + '</h4><span class="lvb">GUILD LV ' + g.level + '</span>' +
+      '<div class="gcount"><small>MEMBERS</small><b>' + g.members.length + ' / ' + GUILD_MAX + '</b></div>' +
+      '<div class="xp"><i style="width:' + (g.members.length / GUILD_MAX * 100) + '%"></i></div>' +
+      '<button class="gb" type="button" data-a="ginvite">INVITE FRIENDS</button>' +
+      '<div class="brow" style="width:100%"><button class="gb pk" type="button" data-a="gchat" style="min-width:0">CHAT</button><button class="gb dis" type="button" data-a="gleave" style="min-width:0">LEAVE</button></div></div>' +
+      '<div class="gmain"><h5><span>MEMBERS ' + g.members.length + ' / ' + GUILD_MAX + '</span><span>LV</span></h5><div class="gmem">';
+    g.members.forEach(function (m) {
+      var you = !!m.you, name = you ? user.name : m.name, lv = you ? user.level : m.level;
+      h += '<div class="frow" data-a="prof" data-n="' + esc(name) + '">' + av(null, name) +
+        '<div class="fi"><b><span>' + esc(name) + (you ? ' (YOU)' : '') + '</span></b><small><i class="sd ' + (m.online ? 'online' : '') + '"></i>' + (m.online ? 'Online' : 'Offline') + '</small></div>' +
+        '<span class="role ' + m.role + '">' + (m.role === 'LEADER' ? '&#9819; ' : '') + m.role + '</span><span class="glv">' + lv + '</span></div>';
+    });
+    return h + '</div></div></div>';
+  }
+  function openGuild() { sheet = 'guild'; openSheet(guildHTML()); }
+
+  function findPerson(name) {
+    if (name === user.name) return null;
+    var p = null;
+    squad.forEach(function (m) { if (m && m.name === name) p = m; });
+    if (!p) social.friends.forEach(function (m) { if (m.name === name) p = m; });
+    if (!p) social.requests.forEach(function (m) { if (m.name === name) p = m; });
+    if (!p && social.guild) social.guild.members.forEach(function (m) { if (m.name === name) p = { name: m.name, level: m.level }; });
+    return p || { name: name };
+  }
+
+  function openProfile(p) {
+    var me = !p, d, name, color, lvl, likes, st, bg = null;
+    if (me) { name = user.name; color = user.skin; lvl = user.level; likes = user.likes; st = user.stats; }
+    else { d = otherData(p); name = p.name; color = p.color == null ? hash(name) % 5 : p.color; lvl = d.level; likes = d.likes; st = d.stats; }
+    sheet = 'profile';
+    var dg = danger(st), wr = st.matches ? Math.round(st.wins / st.matches * 100) : 0;
+    var g = social.guild;
+    var inG = me ? !!g : (g && g.members.some(function (m) { return m.name === name; }));
+    var gtxt = inG ? esc(g.name) : 'NO GUILD';
+    var btns;
+    if (me) btns = '<button class="gb" type="button" data-a="edit">EDIT NAME</button><button class="gb dis" type="button" data-a="soon" data-n="Skins">SKINS</button>';
+    else {
+      var b1 = isFriend(name) ? '<button class="gb dis" type="button" disabled>&#10003; FRIENDS</button>' :
+        (social.sent[name] ? '<button class="gb dis" type="button" disabled>REQUEST SENT</button>' : '<button class="gb" type="button" data-a="addfriend" data-n="' + esc(name) + '">+ ADD FRIEND</button>');
+      var b2 = inSquad(name) ? '<button class="gb dis" type="button" data-a="remove" data-n="' + esc(name) + '">REMOVE FROM SQUAD</button>' :
+        '<button class="gb gr" type="button" data-a="invite" data-n="' + esc(name) + '" data-from="prof">INVITE TO SQUAD</button>';
+      btns = b1 + b2;
+    }
+    var liked = !me && social.liked[name];
+    var likeBtn = me ? '' : '<button class="gb pk" type="button" data-a="like" data-n="' + esc(name) + '"' + (liked ? ' disabled' : '') + ' style="min-width:0">' + (liked ? '&#9829; LIKED' : '&#9829; LIKE') + '</button>';
+    var heart = '<svg viewBox="0 0 24 24"><path d="M12 21C5 15.5 2.5 12 2.5 8.5A4.5 4.5 0 0 1 12 6.5a4.5 4.5 0 0 1 9.5 2C21.5 12 19 15.5 12 21z" fill="#FF3B6B" stroke="#fff" stroke-width="1.4"/></svg>';
+    var shield = '<svg viewBox="0 0 50 56"><path d="M25 2 L47 9 V28 C47 42 37 50 25 54 C13 50 3 42 3 28 V9 Z" fill="#FF3B3B" stroke="#FFD0D0" stroke-width="2.5"/><path d="M14 20 L25 40 L36 20" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    var stats = [['WINS', fmt(st.wins)], ['KILLS', fmt(st.kills)], ['BEST LENGTH', fmt(st.best)], ['WIN RATE', wr + '%'], ['MATCHES', fmt(st.matches)], ['BEST RANK', st.bestRank ? '#' + st.bestRank : '-']];
+    var h = head(me ? 'MY PROFILE' : 'PLAYER PROFILE') + '<div class="pbody prof"><div class="pl">' +
+      '<i class="avb" style="--c:' + COLS[color % COLS.length][0] + '">' + esc(name.charAt(0).toUpperCase()) + '</i>' +
+      '<b class="pn">' + esc(name) + '</b><span class="pid">ID: ' + (me ? userId() : (function () { var n = String(hash(name) * 7919 % 10000000000); while (n.length < 10) n = '0' + n; return n.slice(0, 4) + ' ' + n.slice(4, 8) + ' ' + n.slice(8); })()) + '</span>' +
+      '<span class="lvb">LV ' + lvl + '</span>' + (me ? '<div class="xp"><i style="width:' + ((user.xp % 500) / 5) + '%"></i></div>' : '') + '</div>' +
+      '<div class="pr"><div class="danger">' + shield + '<div class="dtx"><b style="color:#FF6B4A">' + dg.tier + '</b><small>DANGER LEVEL ' + dg.pct + '%</small><div class="dbar"><i style="width:' + dg.pct + '%"></i></div></div></div>' +
+      '<div class="likes">' + heart + '<div><b>' + fmt(likes) + '</b><small>' + (me ? 'LIKES RECEIVED' : 'LIKES') + '</small></div>' + likeBtn + '</div>' +
+      '<div class="sgrid">' + stats.map(function (x) { return '<div class="st3"><b>' + x[1] + '</b><small>' + x[0] + '</small></div>'; }).join('') + '</div>' +
+      '<div class="grow"><i></i>' + gtxt + '<span>' + (inG ? 'MEMBER' : '') + '</span></div>' +
+      '<div class="brow">' + btns + '</div></div></div>';
+    openSheet(h);
+  }
+
+  function onSheetClick(e) {
+    var t = e.target.closest('[data-a]'); if (!t || t.disabled) return;
+    var a = t.dataset.a, n = t.dataset.n, f, i;
+    if (a === 'close') closeSheet();
+    else if (a === 'tab') { ftab = t.dataset.t; openFriends(); }
+    else if (a === 'prof') openProfile(findPerson(n));
+    else if (a === 'invite') { inviteFriend(n); if (t.dataset.from === 'prof') closeSheet(); }
+    else if (a === 'accept') {
+      // NETWORK HOOK: accept on the server.
+      social.requests = social.requests.filter(function (r) { if (r.name === n) { social.friends.push({ name: r.name, level: r.level, status: 'online', color: r.color }); return false; } return true; });
+      saveSocial(); renderProfile(); renderSlots(); openFriends(); VR.ui.toast(n + ' is now your friend');
+    } else if (a === 'decline') {
+      social.requests = social.requests.filter(function (r) { return r.name !== n; });
+      saveSocial(); renderProfile(); openFriends();
+    } else if (a === 'sendid') {
+      var v = (($('mIdIn').value || '').replace(/\s+/g, ''));
+      if (v.length < 8) return VR.ui.toast('Enter a valid player ID');
+      // NETWORK HOOK: look up the player by ID and send a request.
+      VR.ui.toast('Friend request sent to ID ' + v); $('mIdIn').value = '';
+    } else if (a === 'copyid') copyText(userId(), 'Your ID copied');
+    else if (a === 'addfriend') { var p = findPerson(n); sendRequest(p); openProfile(p); }
+    else if (a === 'like') {
+      // NETWORK HOOK: send the like to the server (one like per player per day).
+      social.liked[n] = true; saveSocial(); openProfile(findPerson(n)); VR.ui.toast('You liked ' + n);
+    } else if (a === 'remove') {
+      for (i = 1; i < SIZE; i++) if (squad[i] && squad[i].name === n) squad[i] = null;
+      renderSlots(); closeSheet(); VR.ui.toast(n + ' removed from squad');
+    } else if (a === 'edit') editName();
+    else if (a === 'soon') VR.ui.toast(n + ' - coming soon');
+    else if (a === 'ginvite') {
+      var g = social.guild;
+      if (g.members.length >= GUILD_MAX) return VR.ui.toast('Guild is full (' + GUILD_MAX + '/' + GUILD_MAX + ')');
+      copyText(g.id, 'Guild ID ' + g.id + ' copied - share it with friends'); // NETWORK HOOK: real guild invites
+    } else if (a === 'gchat') VR.ui.toast('Guild chat - coming soon');
+    else if (a === 'gleave') {
+      VR.ui.modal({ title: 'LEAVE GUILD?', body: 'You will leave ' + social.guild.name + '.', actions: [
+        { label: 'LEAVE', primary: true, onClick: function () { social.guild = null; saveSocial(); openGuild(); } }, { label: 'STAY' }] });
+    } else if (a === 'gcreate') {
+      VR.ui.modal({ title: 'CREATE GUILD', html: '<input id="mIn" class="mi" type="text" maxlength="14" placeholder="Guild name" autocomplete="off">', actions: [
+        { label: 'CREATE', primary: true, keepOpen: true, onClick: function () {
+          var nm = ($('mIn').value || '').trim();
+          if (nm.length < 3) return VR.ui.toast('Guild name needs 3 or more letters');
+          social.guild = { name: nm.toUpperCase(), id: 'G-' + newCode(), level: 1, members: [{ name: user.name, role: 'LEADER', you: true, online: true }] };
+          saveSocial(); VR.ui.closeModal(); openGuild();
+        } }, { label: 'CANCEL' }] });
+    } else if (a === 'gjoin') { social.guild = makeGuild(user.name); saveSocial(); openGuild(); }
+  }
+
+  function editName() {
+    VR.ui.modal({ title: 'EDIT NAME', html: '<input id="mIn" class="mi" type="text" maxlength="14" autocomplete="off" value="' + esc(user.name) + '">', actions: [
+      { label: 'SAVE', primary: true, keepOpen: true, onClick: function () {
+        var nm = ($('mIn').value || '').trim();
+        if (nm.length < 3) return VR.ui.toast('Name needs 3 or more letters');
+        user.name = nm; if (squad[0]) squad[0].name = nm;
+        if (VR.auth && VR.auth.user === user) VR.auth.save();
+        VR.ui.closeModal(); renderProfile(); renderSlots(); openProfile(null);
+      } }, { label: 'CANCEL' }] });
+  }
+
+  /* ---------- chat, settings ---------- */
+  function addChat(who, text) {
+    var list = $('chatList'), row = document.createElement('div');
+    var b = document.createElement('b'); b.textContent = who + ': ';
+    row.appendChild(b); row.appendChild(document.createTextNode(text));
+    list.appendChild(row); list.scrollTop = list.scrollHeight;
+  }
+  function openSettings() {
+    VR.ui.modal({
+      title: 'SETTINGS',
+      body: 'Signed in as ' + user.name + ' (' + user.provider + ')',
+      actions: [
+        { label: 'LOG OUT', primary: true, onClick: function () { closeSheet(); VR.auth.logout(); VR.app.go('login'); } },
+        { label: 'CLOSE' }
+      ]
+    });
+  }
+
+  /* ---------- enter / init ---------- */
+  function resetSquad() { squad = [{ name: user.name, you: true }]; for (var i = 1; i < SIZE; i++) squad.push(null); }
+
+  function enter(u) {
+    user = u; initUser(); loadSocial();
+    resetSquad(); code = newCode(); mode = 'squad';
+    $('chatList').innerHTML = ''; addChat('SYSTEM', 'Welcome to Viper Rush. Invite friends with your team code.');
+    closeSheet();
+    renderProfile(); renderSlots();
+    VR.app.go('lobby');
+  }
+
+  function init() {
+    $('slots').addEventListener('click', function (e) {
+      var t = e.target.closest('[data-act]'); if (!t) return;
+      var a = t.dataset.act, i = +t.dataset.i;
+      if (a === 'who') openProfile(i === 0 ? null : squad[i]);
+      else if (a === 'addf') { sendRequest(squad[i]); }
+      else if (a === 'ghost') openInvite();
+      else if (a === 'mic') toggleMic();
+      else if (a === 'snd') toggleSound();
+    });
+    $('pbox').addEventListener('click', onSheetClick);
+    $('sheet').addEventListener('pointerdown', function (e) { if (e.target === $('sheet')) closeSheet(); });
+    $('meBtn').addEventListener('click', function () { openProfile(null); });
+    $('friendsBtn').addEventListener('click', function () { ftab = social.requests.length ? 'requests' : 'friends'; openFriends(); });
+    $('guildBtn').addEventListener('click', openGuild);
+    $('codeBtn').addEventListener('click', function () { copyText(code, 'Team code ' + code + ' copied'); });
+    $('enterBtn').addEventListener('click', openEnterCode);
+    $('modeBtn').addEventListener('click', function () {
+      mode = mode === 'squad' ? 'solo' : 'squad';
+      if (mode === 'solo') for (var i = 1; i < SIZE; i++) squad[i] = null;
+      renderProfile(); renderSlots();
+    });
+    $('chatBtn').addEventListener('click', function () { $('chat').classList.toggle('on'); });
+    $('chatClose').addEventListener('click', function () { $('chat').classList.remove('on'); });
+    $('chatForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var inp = $('chatInput'), t = inp.value.trim(); if (!t) return;
+      addChat(user.name, t); inp.value = '';  // NETWORK HOOK: send t to your squad chat channel
+    });
+    VR.voice.onChange(renderMic);
+    document.querySelectorAll('#lobby [data-soon]').forEach(function (b) {
+      b.addEventListener('click', function () { VR.ui.toast(b.dataset.soon + ' - coming soon'); });
+    });
+    $('coinChip').addEventListener('click', function () { VR.ui.toast('Viper Coin store - coming soon'); });
+    $('gemChip').addEventListener('click', function () { VR.ui.toast('Diamond store - coming soon'); });
+    $('navSettings').addEventListener('click', openSettings);
+    $('settingsBtn').addEventListener('click', openSettings);
+    $('startBtn').addEventListener('click', function () {
+      $('chat').classList.remove('on'); closeSheet();
+      // NETWORK HOOK: start matchmaking with your party here.
+      VR.app.startGame({ mode: mode, squad: squad.filter(Boolean), user: user });
+    });
+  }
+
+  window.VR = window.VR || {};
+  VR.sound = true;
+  VR.lobby = { init: init, enter: enter, recordGame: recordGame, refresh: function () { if (user) { renderProfile(); renderSlots(); } } };
+})();
