@@ -25,12 +25,12 @@ window.VR_CONFIG = {
   loadingSeconds: 2.6, // fake loading time (replace with real asset loading later)
 
   game: {
-    worldSize: 6400,       // arena is worldSize x worldSize (big map with 5 zones)
-    botCount: 36,          // enemy bots (offline mode)
+    worldSize: 48000,      // arena is worldSize x worldSize (HUGE map with 5 zones). Change it here to make the map smaller/bigger
+    maxPlayers: 50,        // players in one match (you + friends + bots fill the rest)
     matchSeconds: 1200,    // VIPER ROYALE = one match is 20 minutes
     zoneStart: 150,        // red wall starts closing after this many seconds
     zoneEnd: 1080,         // red wall reaches its smallest size here
-    zoneMinSize: 900,      // smallest safe area (square side)
+    zoneMinSize: 2400,     // smallest safe area (square side)
     goldenEvery: 50,       // seconds between golden orbs
     hpMax: 100,            // HP of every snake
     autoReviveSeconds: 180,// die in the first 3 minutes = revived automatically (once)

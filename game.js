@@ -22,6 +22,8 @@
   var PAL = [['#B6FF3B', '#10B981'], ['#22D3EE', '#2563EB'], ['#C084FC', '#7C3AED'], ['#FF9F43', '#EF4444'], ['#F472B6', '#BE185D'], ['#FDE047', '#CA8A04']]
     .map(function (p) { return { a: hex(p[0]), b: hex(p[1]), css: p[0] }; });
 
+  var lastPlace = '';
+  var FOOD_K = 2.3;      // orb amount per zone = zone count x this (few orbs, big gaps)
   var Z = [
     { n: 'GOLD CORE', floor: '#3A2E0A', map: '#C9A227', m: 1.6, count: 260, note: 'rich orbs, big coins' },
     { n: 'JUNGLE', floor: '#0F2A1E', map: '#1F7A4D', m: 1, count: 1000, note: 'lots of orbs' },
@@ -72,8 +74,24 @@
   }
   function outsideSafe(x, y, sr, m) { m = m || 0; return x < sr.x0 + m || x > sr.x1 - m || y < sr.y0 + m || y > sr.y1 - m; }
 
+
+  /* ---------- named places ---------- */
+  // fx, fy = position as a fraction of the map (0..1). Each place has a few extra orbs and its name is shown on the ground, minimap and in a banner.
+  var PLACES = [
+    { n: 'Viper Temple', fx: .12, fy: .14 }, { n: 'Toxic Swamp', fx: .35, fy: .12 }, { n: 'Hidden Grove', fx: .14, fy: .38 }, { n: 'Monkey Ruins', fx: .36, fy: .36 },
+    { n: 'Sand Fort', fx: .64, fy: .12 }, { n: 'Oasis Camp', fx: .88, fy: .14 }, { n: 'Scorpion Dunes', fx: .62, fy: .38 }, { n: 'Lost Pyramid', fx: .87, fy: .36 },
+    { n: 'Frost Peak', fx: .13, fy: .64 }, { n: 'Frozen Lake', fx: .36, fy: .62 }, { n: 'Ice Palace', fx: .12, fy: .88 }, { n: 'Blizzard Camp', fx: .37, fy: .87 },
+    { n: 'Magma Core', fx: .63, fy: .64 }, { n: 'Ash Village', fx: .88, fy: .63 }, { n: 'Dragon Cave', fx: .64, fy: .87 }, { n: 'Fire Fort', fx: .88, fy: .88 }
+  ];
+  function placeR() { return WORLD * .03; }
+  function placeAt(x, y) {
+    var R = placeR();
+    for (var i = 0; i < PLACES.length; i++) { var p = PLACES[i]; if (Math.abs(x - p.fx * WORLD) < R && Math.abs(y - p.fy * WORLD) < R && Math.hypot(x - p.fx * WORLD, y - p.fy * WORLD) < R) return p.n; }
+    return Math.hypot(x - WORLD / 2, y - WORLD / 2) < GOLD_R ? 'Gold Core' : '';
+  }
+
   /* ---------- snakes ---------- */
-  function segCount(s) { return Math.min(260, Math.floor(14 + s.mass * 0.8)); }
+  function segCount(s) { return Math.min(260, Math.floor(14 + s.mass * 0.1)); }     // length grows only 0.1 per mass
   function radiusOf(s) { return 8 + Math.min(10, s.mass / 70); }
 
   function skinList() { return VR.cos.SKINS.filter(function (x) { return !x.pass; }); }
@@ -120,11 +138,11 @@
   function addFood(x, y, v, ci, keep, z) {
     foods.push({ x: x, y: y, v: v, r: 3 + v * 1.4, ci: ci == null ? (Math.random() * PAL.length) | 0 : ci, keep: !!keep, z: z == null ? zoneAt(x, y) : z });
   }
-  function baseFoodV(z) { return (1 + Math.random() * 1.5) * Z[z].m; }
+  function baseFoodV(z) { return 1 + Math.random() * 1.5; }       // same value in every zone
 
   function dropDeathFood(s) {
     for (var i = 0; i < s.segs.length; i += 3) addFood(s.segs[i].x + rnd(-10, 10), s.segs[i].y + rnd(-10, 10), 2 + s.mass / 90, s.ci, false);
-    var extra = foods.length - 5400;
+    var extra = foods.length - 14000;
     for (var j = 0; j < foods.length && extra > 0; j++) if (!foods[j].keep) { foods.splice(j, 1); j--; extra--; }
   }
 
@@ -217,7 +235,7 @@
       var d2 = dx * dx + dy * dy, m = hr + f.r + reach;
       if (d2 < m * m) {
         if (d2 < (hr + f.r) * (hr + f.r)) {
-          s.mass += f.v * 0.9; if (s.isPlayer) orbs++;
+          s.mass += f.v * 0.5; if (s.isPlayer) orbs++;
           if (f.keep) { var p = randInZone(f.z); f.x = p.x; f.y = p.y; f.v = baseFoodV(f.z); f.r = 3 + f.v * 1.4; f.ci = (Math.random() * PAL.length) | 0; }
           else { foods[i] = foods[foods.length - 1]; foods.pop(); }
         } else { var pull = mag ? .3 : .18; f.x += dx * pull; f.y += dy * pull; }
@@ -329,9 +347,9 @@
       var pl = player.segs[0], pdd = Math.hypot(pl.x - h.x, pl.y - h.y);
       if (pdd > 230) { s.targetAngle = Math.atan2(pl.y - h.y, pl.x - h.x); s.boost = pdd > 520 && s.mass > 20; return; }
     }
-    var best = null, bd = 320 * 320;
+    var best = null, bd = 900 * 900;
     for (i = 0; i < foods.length; i++) {
-      var f = foods[i], fdx = f.x - h.x; if (fdx > 320 || fdx < -320) continue;
+      var f = foods[i], fdx = f.x - h.x; if (fdx > 900 || fdx < -900) continue;
       var fdy = f.y - h.y, d2 = fdx * fdx + fdy * fdy;
       if (d2 < bd) { bd = d2; best = f; }
     }
@@ -412,6 +430,7 @@
 
   function start(c) {
     cfg = c || { mode: 'solo', squad: [] };
+    lastPlace = '';
     if (VR.settings) VR.settings.apply();
     $('emoPanel').classList.remove('on');
     G = VR_CONFIG.game; WORLD = G.worldSize; GOLD_R = WORLD * .11; HPMAX = G.hpMax || 100;
@@ -426,18 +445,21 @@
     resize();
     zc = { x: rnd(WORLD * .32, WORLD * .68), y: rnd(WORLD * .32, WORLD * .68) };
     Z.forEach(function (zn, zi) {
-      var n = Math.round(zn.count * (WORLD / 6400) * (WORLD / 6400));
+      var n = Math.round(zn.count * FOOD_K);
       for (var i = 0; i < n; i++) { var p = randInZone(zi); addFood(p.x, p.y, baseFoodV(zi), null, true, zi); }
     });
-    for (var r = 0; r < 44; r++) {
+    PLACES.forEach(function (pl) {                                    // a few extra orbs in each named place
+      for (var i = 0; i < 14; i++) { var a = Math.random() * 6.283, d = Math.sqrt(Math.random()) * placeR() * .9; var fx = pl.fx * WORLD + Math.cos(a) * d, fy = pl.fy * WORLD + Math.sin(a) * d; addFood(fx, fy, baseFoodV(0), null, true, zoneAt(fx, fy)); }
+    });
+    for (var r = 0; r < 300; r++) {
       var rp = { x: rnd(300, WORLD - 300), y: rnd(300, WORLD - 300) };
       if (Math.hypot(rp.x - WORLD / 2, rp.y - WORLD / 2) < GOLD_R * .55) { r--; continue; }
       rocks.push({ x: rp.x, y: rp.y, r: rnd(38, 90) });
     }
-    for (var q = 0; q < 18; q++) { var pp = freeSpot(0); pickups.push({ x: pp.x, y: pp.y, type: q % 3, cd: 0 }); }
-    for (var md = 0; md < 20; md++) { var mp = freeSpot(0); meds.push({ x: mp.x, y: mp.y, big: md % 3 === 0, cd: 0 }); }
+    for (var q = 0; q < 90; q++) { var pp = freeSpot(0); pickups.push({ x: pp.x, y: pp.y, type: q % 3, cd: 0 }); }
+    for (var md = 0; md < 100; md++) { var mp = freeSpot(0); meds.push({ x: mp.x, y: mp.y, big: md % 3 === 0, cd: 0 }); }
     // match coins: 50 each in dangerous places (gold core, lava), 10 each elsewhere, always single coins
-    [[0, 36, 50], [4, 40, 50], [1, 60, 10], [2, 60, 10], [3, 60, 10]].forEach(function (zz) {
+    [[0, 144, 50], [4, 160, 50], [1, 240, 10], [2, 240, 10], [3, 240, 10]].forEach(function (zz) {
       for (var i = 0; i < zz[1]; i++) { var cp = randInZone(zz[0]); mcoins.push({ x: cp.x, y: cp.y, v: zz[2], z: zz[0] }); }
     });
 
@@ -453,7 +475,8 @@
     });
     var used = {}; snakes.forEach(function (s) { used[s.name] = 1; });
     var pool = NAMES.filter(function (n) { return !used[n]; });
-    for (var b = 0; b < G.botCount; b++) {
+    var nBots = Math.max(0, (G.maxPlayers || 50) - 1 - mates.length);
+    for (var b = 0; b < nBots; b++) {
       var p2 = freeSpot(900);
       snakes.push(makeSnake({ name: pool[b % pool.length] + (b >= pool.length ? b : ''), ci: (b + 2) % PAL.length, x: p2.x, y: p2.y, mass: rnd(10, 60) }));
     }
@@ -531,8 +554,9 @@
     hudT -= dt;
     if (hudT <= 0) {
       hudT = .25;
-      var h = player.segs[0], zn = Z[zoneAt(h.x, h.y)], out = outsideSafe(h.x, h.y, safeRect(matchT), 0);
-      $('zoneTag').textContent = player.dead ? 'WATCHING YOUR TEAM' : (out ? 'OUTSIDE THE RED WALL - HP DRAINING!' : ('ZONE: ' + zn.n + ' - ' + zn.note));
+      var h = player.segs[0], zn = Z[zoneAt(h.x, h.y)], curPlace = placeAt(h.x, h.y), out = outsideSafe(h.x, h.y, safeRect(matchT), 0);
+      if (!player.dead && curPlace !== lastPlace) { lastPlace = curPlace; if (curPlace) banner('ENTERING: ' + curPlace.toUpperCase(), 1800); }
+      $('zoneTag').textContent = player.dead ? 'WATCHING YOUR TEAM' : (out ? 'OUTSIDE THE RED WALL - HP DRAINING!' : ('ZONE: ' + zn.n + (curPlace ? ' - ' + curPlace : '')));
       $('zoneTag').style.color = out && !player.dead ? '#FF6B7A' : '#fff';
       var fh = '';
       FX.forEach(function (f) { if (player.fx[f.k] > 0) fh += '<span class="fx" style="--c:' + f.c + '">' + f.n + ' ' + Math.ceil(player.fx[f.k]) + 's</span>'; });
@@ -585,12 +609,16 @@
       x.strokeStyle = '#FFE45C'; x.lineWidth = 2; x.beginPath(); x.arc(gx, gy, pr + 4, 0, 6.283); x.stroke();
       x.fillStyle = '#FFD23F'; x.beginPath(); x.arc(gx, gy, pr, 0, 6.283); x.fill();
     }
+    x.fillStyle = 'rgba(255,255,255,.8)';
+    for (i = 0; i < PLACES.length; i++) { x.beginPath(); x.arc(PLACES[i].fx * S, PLACES[i].fy * S, big ? 4 : 2, 0, 6.283); x.fill(); }
     if (!big) {
       var vw = (W / cam.s) * k, vh = (H / cam.s) * k;
       x.strokeStyle = 'rgba(255,255,255,.7)'; x.lineWidth = 1.2; x.strokeRect(cam.x * k - vw / 2, cam.y * k - vh / 2, vw, vh);
     } else {
       x.font = '700 15px Rajdhani, sans-serif'; x.textAlign = 'center'; x.fillStyle = '#fff';
       x.fillText('JUNGLE', S * .25, S * .06); x.fillText('DESERT', S * .75, S * .06); x.fillText('ICE', S * .25, S * .97); x.fillText('LAVA', S * .75, S * .97); x.fillText('GOLD CORE', S / 2, S / 2 + GOLD_R * k + 16);
+      x.font = '600 11px Rajdhani, sans-serif'; x.fillStyle = 'rgba(255,255,255,.9)';
+      for (i = 0; i < PLACES.length; i++) x.fillText(PLACES[i].n, PLACES[i].fx * S, PLACES[i].fy * S - 8);
     }
   }
   function drawMini() { drawMapTo(mctx, mini.width, false); if (mapOpen) drawMapTo(bctx, bigCv.width, true); }
@@ -710,6 +738,15 @@
     ctx.stroke();
     ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(hw, 0); ctx.lineTo(hw, WORLD); ctx.moveTo(0, hw); ctx.lineTo(WORLD, hw); ctx.stroke();
     ctx.strokeStyle = 'rgba(255,60,90,.85)'; ctx.lineWidth = 10; ctx.strokeRect(0, 0, WORLD, WORLD);
+    var PR = placeR();
+    ctx.textAlign = 'center';
+    for (i = 0; i < PLACES.length; i++) {                           // named places on the ground
+      var pl = PLACES[i], px = pl.fx * WORLD, py = pl.fy * WORLD;
+      if (px < vx0 - PR || px > vx1 + PR || py < vy0 - PR || py > vy1 + PR) continue;
+      ctx.fillStyle = 'rgba(255,255,255,.05)'; ctx.beginPath(); ctx.arc(px, py, PR, 0, 6.283); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.lineWidth = 8; ctx.setLineDash([60, 50]); ctx.beginPath(); ctx.arc(px, py, PR, 0, 6.283); ctx.stroke(); ctx.setLineDash([]);
+      ctx.font = '800 64px Rajdhani, sans-serif'; ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillText(pl.n.toUpperCase(), px, py + 22);
+    }
     for (i = 0; i < rocks.length; i++) {
       var rk = rocks[i]; if (rk.x < vx0 - rk.r || rk.x > vx1 + rk.r || rk.y < vy0 - rk.r || rk.y > vy1 + rk.r) continue;
       ctx.fillStyle = '#4B5575'; ctx.strokeStyle = '#2A3150'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(rk.x, rk.y, rk.r, 0, 6.283); ctx.fill(); ctx.stroke();
