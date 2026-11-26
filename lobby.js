@@ -76,6 +76,11 @@
     user.level = Math.max(user.level || 1, 1 + Math.floor(user.xp / 500));
     user.coins = user.coins == null ? 500 : user.coins;
     user.gems = user.gems == null ? 20 : user.gems;
+    user.inv = user.inv || { skins: { s0: true }, chars: { c0: true }, anims: {} };
+    user.inv.skins = user.inv.skins || { s0: true }; user.inv.chars = user.inv.chars || { c0: true }; user.inv.anims = user.inv.anims || {};
+    user.eq = user.eq || { skin: 's0', char: 'c0', anim: '' };
+    user.pass = !!user.pass;
+    var gm = (location.search.match(/[?&]gems=(\d+)/) || [])[1]; if (gm) user.gems = +gm;     // testing: index.html?gems=5000
     user.rp = user.rp || { solo: 0, squad: 0 };
     var sn = seasonNo();
     if (user.season !== sn) {            // new season: ranks drop a little
@@ -108,15 +113,15 @@
 
   /* ---------- missions (daily + weekly) ---------- */
   var DAILY = [
-    { id: 'matches', t: 'Play 3 matches', goal: 3, coins: 30, gems: 2, f: 'matches' },
+    { id: 'matches', t: 'Play 3 matches', goal: 3, coins: 30, gems: 0, f: 'matches' },
     { id: 'orbs', t: 'Eat 500 orbs', goal: 500, coins: 40, gems: 0, f: 'orbs' },
     { id: 'kills', t: 'Eliminate 5 snakes', goal: 5, coins: 60, gems: 0, f: 'kills' },
-    { id: 'win', t: 'Become VIPER KING (win a match)', goal: 1, coins: 100, gems: 5, f: 'wins' }
+    { id: 'win', t: 'Become VIPER KING (win a match)', goal: 1, coins: 100, gems: 0, f: 'wins' }
   ];
   var WEEKLY = [
-    { id: 'squad10', t: 'Play 10 squad matches with friends', goal: 10, coins: 300, gems: 20, f: 'squad' },
-    { id: 'kills30', t: 'Eliminate 30 snakes', goal: 30, coins: 250, gems: 15, f: 'kills' },
-    { id: 'win3', t: 'Win 3 matches', goal: 3, coins: 400, gems: 25, f: 'wins' }
+    { id: 'squad10', t: 'Play 10 squad matches with friends', goal: 10, coins: 300, gems: 0, f: 'squad' },
+    { id: 'kills30', t: 'Eliminate 30 snakes', goal: 30, coins: 250, gems: 0, f: 'kills' },
+    { id: 'win3', t: 'Win 3 matches', goal: 3, coins: 400, gems: 0, f: 'wins' }
   ];
   function dayKey() { var d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
   function ensureMissions() {
@@ -177,8 +182,13 @@
   }
 
   /* ---------- snake picture for the lobby stage ---------- */
-  function snakeSVG(ci) {
-    var c = COLS[ci % COLS.length], id = 'sg' + (++sv), s = '';
+  function snakeSVG(ci, me) {
+    var c = COLS[ci % COLS.length], id = 'sg' + (++sv), s = '', ch = null;
+    if (me && user && user.eq) {
+      var sk = VR.cos.find('skin', user.eq.skin); ch = VR.cos.find('char', user.eq.char);
+      c = sk.t === 'rainbow' ? ['#FF4DA6', '#4D9DFF'] : ['rgb(' + sk.a + ')', 'rgb(' + sk.b + ')'];
+    }
+    var gearT = 'translate(22 -172) scale(1.05) translate(-60 -62)';
     s += '<svg class="snk" viewBox="-130 -215 260 245" aria-hidden="true"><defs>' +
       '<linearGradient id="' + id + '" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="' + c[0] + '"/><stop offset="1" stop-color="' + c[1] + '"/></linearGradient>' +
       '<radialGradient id="' + id + 'p"><stop offset="0" stop-color="#FFE9A8" stop-opacity=".9"/><stop offset=".6" stop-color="#FFB11F" stop-opacity=".5"/><stop offset="1" stop-color="#FFB11F" stop-opacity="0"/></radialGradient>' +
@@ -194,11 +204,13 @@
     s += '<path d="' + d + '" fill="none" stroke="#0B2B1A" stroke-opacity=".35" stroke-width="36" stroke-linecap="round"/>' +
       '<path d="' + d + '" fill="none" stroke="url(#' + id + ')" stroke-width="32" stroke-linecap="round"/>' +
       '<path d="' + d + '" fill="none" stroke="#fff" stroke-opacity=".3" stroke-width="5" stroke-linecap="round" transform="translate(-7 0)"/>' +
+      (ch ? '<g transform="' + gearT + '">' + VR.cos.accBack(ch) + '</g>' : '') +
       '<ellipse cx="22" cy="-172" rx="38" ry="32" fill="url(#' + id + ')" stroke="#0B2B1A" stroke-opacity=".6" stroke-width="3"/>' +
       '<ellipse cx="14" cy="-184" rx="16" ry="8" fill="#fff" fill-opacity=".3"/>';
     [-1, 1].forEach(function (sx) {
       s += '<ellipse cx="' + (22 + sx * 14) + '" cy="-176" rx="10" ry="11" fill="#fff"/><circle cx="' + (22 + sx * 14 + 1.5) + '" cy="-175" r="5" fill="#101530"/><circle cx="' + (22 + sx * 14 + 3) + '" cy="-177" r="1.8" fill="#fff"/>';
     });
+    if (ch) s += '<g transform="' + gearT + '">' + VR.cos.accFront(ch) + '</g>';
     s += '<path d="M22 -146 v12 l-5 6 m5 -6 l5 6" stroke="#FF3B5C" stroke-width="3" fill="none" stroke-linecap="round"/></svg>';
     return s;
   }
@@ -231,7 +243,7 @@
     order().forEach(function (i) {
       var m = squad[i];
       if (i === 0) {
-        html += '<div class="slot you"><button class="who" type="button" data-act="who" data-i="0">' + snakeSVG(user.skin) +
+        html += '<div class="slot you"><button class="who" type="button" data-act="who" data-i="0">' + snakeSVG(user.skin, true) +
           '<span class="ntag"><em>LV ' + user.level + '</em><span>' + esc(user.name) + '</span></span></button>' +
           '<div class="ms"><button class="pillb" id="micBtn" type="button" data-act="mic" aria-pressed="false"><svg><use href="#icoMic"/></svg>MIC</button>' +
           '<button class="pillb" id="sndBtn" type="button" data-act="snd"><svg><use href="#icoSnd"/></svg>SOUND</button></div></div>';
@@ -475,6 +487,46 @@
     openSheet(h);
   }
 
+  /* ---------- skins / characters / animations (all unlocked with diamonds) + membership ---------- */
+  var ctab = 'skin', SEASON_PRICE = 995;
+  var INVKEY = { skin: 'skins', char: 'chars', anim: 'anims' };
+  var DIA = '<svg class="di" aria-hidden="true"><use href="#icoD"/></svg>';
+  function openCosmetics(keepScroll) {
+    sheet = 'cos';
+    var L = ctab === 'skin' ? VR.cos.SKINS : ctab === 'char' ? VR.cos.CHARS : VR.cos.ANIMS, inv = user.inv[INVKEY[ctab]], eqid = user.eq[ctab];
+    var h = head('CUSTOMIZE') + '<div class="pbody"><div class="tabs">' +
+      ['skin', 'char', 'anim'].map(function (k) { return '<button class="tab' + (ctab === k ? ' on' : '') + '" type="button" data-a="ctab" data-t="' + k + '">' + (k === 'skin' ? 'SKINS' : k === 'char' ? 'CHARACTERS' : 'ANIMATIONS') + '</button>'; }).join('') +
+      '</div><div class="dbal">' + DIA + ' ' + fmt(user.gems) + ' DIAMONDS</div><div class="cgrid">';
+    if (ctab === 'anim') h += '<div class="cc' + (!eqid ? ' eq' : '') + '"><div class="s1chip" style="color:#9FB0FF;box-shadow:inset 0 0 0 2px #444">NONE</div><b>No animation</b><small>Free</small>' +
+      (!eqid ? '<button class="gb dis" type="button" disabled>EQUIPPED</button>' : '<button class="gb" type="button" data-a="ceq" data-id="">EQUIP</button>') + '</div>';
+    L.forEach(function (x) {
+      var own = !!inv[x.id], pic = ctab === 'skin' ? VR.cos.svgBody(x) : ctab === 'char' ? VR.cos.svgFace(x) : VR.cos.svgAnim(x);
+      var sub = x.pass ? 'SEASON 1 ONLY' : (ctab === 'char' ? x.note : (x.L ? 'LEGENDARY' : (x.note || 'NORMAL')));
+      var btn;
+      if (own) btn = eqid === x.id ? '<button class="gb dis" type="button" disabled>EQUIPPED</button>' : '<button class="gb" type="button" data-a="ceq" data-id="' + x.id + '">EQUIP</button>';
+      else if (x.pass) btn = '<button class="gb pk" type="button" data-a="openmem">SEASON PASS</button>';
+      else btn = '<button class="gb pk" type="button" data-a="cbuy" data-id="' + x.id + '">' + DIA + ' ' + x.p + '</button>';
+      h += '<div class="cc' + (x.L ? ' L' : '') + (own && eqid === x.id ? ' eq' : '') + '">' + pic + '<b>' + esc(x.n) + '</b><small>' + sub + '</small>' + btn + '</div>';
+    });
+    h += '</div></div>';
+    var st = keepScroll && $('pbox').querySelector('.pbody') ? $('pbox').querySelector('.pbody').scrollTop : 0;
+    openSheet(h);
+    if (st) $('pbox').querySelector('.pbody').scrollTop = st;
+  }
+
+  function openMembership() {
+    sheet = 'mem';
+    var c = VR.cos, sk = c.find('skin', 'sp1'), ch = c.find('char', 'csov'), an = c.find('anim', 'a_crown');
+    var h = head('MEMBERSHIP') + '<div class="pbody"><div class="memhero"><b>SEASON 1</b><small>' + (user.pass ? 'You are a Season 1 member!' : 'Rare items you can only get this season') + '</small></div>' +
+      '<div class="cgrid"><div class="cc L">' + c.svgFace(ch) + '<b>' + ch.n + '</b><small>Character</small></div>' +
+      '<div class="cc L">' + c.svgBody(sk) + '<b>' + sk.n + '</b><small>Skin</small></div>' +
+      '<div class="cc">' + c.svgAnim(an) + '<b>' + an.n + '</b><small>Animation</small></div></div>' +
+      '<div class="cgrid" style="grid-template-columns:1fr 2fr;margin-top:calc(var(--u)*1.6)"><div class="cc"><div class="s1chip">S1</div><small>Badge</small></div>' +
+      '<div class="cc" style="justify-content:center"><b>' + (user.pass ? 'MEMBER' : 'SEASON 1 MEMBERSHIP') + '</b><small>' + fmt(user.gems) + ' diamonds in your wallet</small>' +
+      (user.pass ? '<button class="gb dis" type="button" disabled>JOINED &#10003;</button>' : '<button class="gb pk" type="button" data-a="joinmem">' + DIA + ' ' + SEASON_PRICE + '  JOIN</button>') + '</div></div></div>';
+    openSheet(h);
+  }
+
   function findPerson(name) {
     if (name === user.name) return null;
     var p = null;
@@ -517,7 +569,7 @@
       '<div class="pr"><div class="danger">' + shield + '<div class="dtx"><b style="color:#FF6B4A">' + dg.tier + '</b><small>DANGER LEVEL ' + dg.pct + '%</small><div class="dbar"><i style="width:' + dg.pct + '%"></i></div></div></div>' +
       '<div class="likes">' + heart + '<div><b>' + fmt(likes) + '</b><small>' + (me ? 'LIKES RECEIVED' : 'LIKES') + '</small></div>' + likeBtn + '</div>' +
       '<div class="sgrid">' + stats.map(function (x) { return '<div class="st3"><b>' + x[1] + '</b><small>' + x[0] + '</small></div>'; }).join('') + '</div>' +
-      '<div class="rkrow">' + rankChip('SOLO', me ? user.rp.solo : rpOther(name, 'solo')) + rankChip('SQUAD', me ? user.rp.squad : rpOther(name, 'squad')) + '</div>' +
+      '<div class="rkrow">' + rankChip('SOLO', me ? user.rp.solo : rpOther(name, 'solo')) + rankChip('SQUAD', me ? user.rp.squad : rpOther(name, 'squad')) + (me && user.pass ? '<div class="rkb" style="--c:#FFD23F"><i></i><div><small>SEASON 1</small>S1 MEMBER</div></div>' : '') + '</div>' +
       '<div class="grow"><i></i>' + gtxt + '<span>' + (inG ? 'MEMBER' : '') + '</span></div>' +
       '<div class="brow">' + btns + '</div></div></div>';
     openSheet(h);
@@ -528,6 +580,22 @@
     var a = t.dataset.a, n = t.dataset.n, f, i;
     if (a === 'close') closeSheet();
     else if (a === 'rtab') { rtab = t.dataset.t; openRanks(); }
+    else if (a === 'ctab') { ctab = t.dataset.t; openCosmetics(); }
+    else if (a === 'ceq') { user.eq[ctab] = t.dataset.id; saveUser(); renderSlots(); openCosmetics(true); VR.ui.toast('Equipped!'); }
+    else if (a === 'cbuy') {
+      var it = VR.cos.find(ctab, t.dataset.id);
+      if (user.gems < it.p) { VR.ui.toast('Need ' + (it.p - user.gems) + ' more diamonds'); }
+      else { user.gems -= it.p; user.inv[INVKEY[ctab]][it.id] = true; user.eq[ctab] = it.id; saveUser(); renderProfile(); renderSlots(); VR.ui.toast(it.n + ' unlocked and equipped!'); }
+      openCosmetics(true);
+    }
+    else if (a === 'openmem') openMembership();
+    else if (a === 'joinmem') {
+      if (user.pass) return;
+      if (user.gems < SEASON_PRICE) { VR.ui.toast('Need ' + (SEASON_PRICE - user.gems) + ' more diamonds'); return; }
+      user.gems -= SEASON_PRICE; user.pass = true;
+      user.inv.skins.sp1 = true; user.inv.chars.csov = true; user.inv.anims.a_crown = true;
+      saveUser(); renderProfile(); VR.ui.toast('Welcome to Season 1! Items added to CUSTOMIZE'); openMembership();
+    }
     else if (a === 'mtab') { mtab = t.dataset.t; openMissions(); }
     else if (a === 'claim') {
       var lst = t.dataset.w === 'daily' ? DAILY : WEEKLY, st = t.dataset.w === 'daily' ? user.missions.d : user.missions.w;
@@ -639,6 +707,8 @@
     $('guildBtn').addEventListener('click', openGuild);
     $('missionBtn').addEventListener('click', openMissions);
     $('ranksBtn').addEventListener('click', openRanks);
+    $('skinsBtn').addEventListener('click', function () { openCosmetics(); });
+    $('memBtn').addEventListener('click', openMembership);
     $('codeBtn').addEventListener('click', function () { copyText(code, 'Team code ' + code + ' copied'); });
     $('enterBtn').addEventListener('click', openEnterCode);
     $('modeBtn').addEventListener('click', function () {
