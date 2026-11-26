@@ -25,7 +25,7 @@ window.VR_CONFIG = {
   loadingSeconds: 2.6, // fake loading time (replace with real asset loading later)
 
   // Address of your game server, for example 'wss://viper-rush-server.onrender.com'. Leave '' to play offline with bots.
-  serverUrl: '',
+  serverUrl: 'wss://viper-rush-server.onrender.com',
 
   game: {
     worldSize: 48000,      // arena is worldSize x worldSize (HUGE map with 5 zones). Change it here to make the map smaller/bigger
