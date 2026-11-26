@@ -86,6 +86,7 @@
       <button class="side" type="button" data-soon="Reward"><i class="dot" style="--c:#FFD23F"></i><span>REWARD</span></button>
       <button class="side" type="button" data-soon="Mail"><i class="dot" style="--c:#7DE8FF"></i><span>MAIL</span></button>
       <button class="side" id="ranksBtn" type="button"><i class="dot" style="--c:#7CFFB2"></i><span>RANKS</span></button>
+      <button class="side gold" id="memBtn" type="button"><i class="dot" style="--c:#FFD23F"></i><span>MEMBERSHIP</span></button>
     </aside>
 
     <main class="stage" id="slots" aria-label="Squad"></main>
@@ -101,7 +102,7 @@
 
     <nav class="bottom">
       <button type="button" class="nav" data-soon="Store">STORE</button>
-      <button type="button" class="nav" data-soon="Skins">SKINS</button>
+      <button type="button" class="nav" id="skinsBtn">SKINS</button>
       <button type="button" class="nav" id="missionBtn">MISSIONS<i class="rdot" id="missionDot"></i></button>
       <button type="button" class="nav" id="chatBtn">CHAT</button>
       <button type="button" class="nav" id="navSettings">SETTINGS</button>
@@ -117,7 +118,7 @@
         <div class="pill"><span>LENGTH</span><b id="hudLen">0</b></div>
         <div class="pill cy"><span>KILLS</span><b id="hudKills">0</b></div>
         <div class="pill pk"><span>ALIVE</span><b id="hudAlive">0</b></div>
-        <div class="pill gd"><span>TIME</span><b id="hudTime">6:00</b></div>
+        <div class="pill gd"><span>TIME</span><b id="hudTime">20:00</b></div>
       </div>
       <canvas id="mini" width="240" height="240"></canvas>
       <div class="zonetag" id="zoneTag"></div>
@@ -128,6 +129,20 @@
       <div class="squadbar" id="squadBar"></div>
       <div class="stick" id="stick"><i id="knob"></i></div>
       <button class="boost" id="boostBtn" type="button">BOOST</button>
+      <button class="heal hl" id="healL" type="button" aria-label="Big heal"><b>+60</b><small>200c</small></button>
+      <button class="heal hs" id="healS" type="button" aria-label="Small heal"><b>+25</b><small>100c</small></button>
+      <div class="hpwrap"><div class="hpbar"><i id="hpFill"></i><span id="hpTxt">HP 100 / 100</span></div><div class="mcoin"><i></i><b id="hudCoin">0</b></div></div>
+      <div class="spec" id="spec">
+        <div class="sinfo"><small>WATCHING</small><b id="specName"></b><small id="specInfo"></small></div>
+        <div class="srow">
+          <button type="button" id="specPrev" aria-label="Previous teammate">&lt;</button>
+          <button type="button" id="specNext" aria-label="Next teammate">&gt;</button>
+          <button type="button" id="specLike" class="lk">LIKE</button>
+          <button type="button" id="specReport" class="rp">REPORT</button>
+          <button type="button" id="specLeave" class="lv">LEAVE</button>
+        </div>
+        <div class="rep" id="repMenu"><button type="button" data-r="Hacker / cheating">HACKER</button><button type="button" data-r="Abusive chat">ABUSIVE</button><button type="button" data-r="Other">OTHER</button></div>
+      </div>
     </div>
     <div class="overlay" id="bigMap"><div class="mapbox"><canvas id="bigMapCv" width="560" height="560"></canvas><p>Tap anywhere to close</p></div></div>
     <div class="overlay" id="result">
@@ -188,6 +203,7 @@
 -->
 
 <script src="js/config.js"></script>
+<script src="js/cosmetics.js"></script>
 <script src="js/background.js"></script>
 <script src="js/voice.js"></script>
 <script src="js/login.js"></script>
