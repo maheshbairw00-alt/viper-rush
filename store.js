@@ -56,7 +56,7 @@
 
   var LISTS = { emote: EMOTES, frame: FRAMES, badge: BADGES, banner: BANNERS };
   var INV = { skin: 'skins', char: 'chars', anim: 'anims', emote: 'emotes', frame: 'frames', badge: 'badges', banner: 'banners' };
-  var tab = 'offers';
+  var tab = 'offers', invMode = false;
 
   function U() { return (VR.auth && VR.auth.user) || (VR.lobby && VR.lobby.openUser && VR.lobby.openUser()); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -114,12 +114,13 @@
 
   function card(kind, it, priceOverride) {
     var has = own(kind, it.id), u = U(), eqd = false, btn;
-    if (kind === 'emote') eqd = u.eq.emotes.indexOf(it.id) >= 0; else if (kind !== 'skin' && kind !== 'char' && kind !== 'anim') eqd = u.eq[kind] === it.id;
+    if (kind === 'emote') eqd = u.eq.emotes.indexOf(it.id) >= 0; else eqd = u.eq[kind] === it.id;
     var price = priceOverride != null ? priceOverride : it.p;
     if (has) btn = '<button type="button" class="gb' + (eqd ? ' gr' : '') + '" data-a="eq" data-k="' + kind + '" data-id="' + it.id + '">' + (eqd ? (kind === 'emote' ? 'UNEQUIP' : 'EQUIPPED') : 'EQUIP') + '</button>';
     else btn = '<button type="button" class="gb" data-a="buy" data-k="' + kind + '" data-id="' + it.id + '" data-p="' + price + '">' + price + ' 💎</button>';
+    var gbtn = it.p > 0 && !invMode ? '<button type="button" class="gb pk gft" data-a="gift" data-k="' + kind + '" data-id="' + it.id + '">GIFT 🎁</button>' : '';
     return '<div class="cc sc r' + (it.r || 0) + (eqd ? ' eq' : '') + '">' + pic(kind, it) + '<b>' + esc(it.n) + '</b>' + rtag(it) +
-      (priceOverride != null && !has ? '<small><s>' + it.p + '</s> deal</small>' : '') + btn + '</div>';
+      (priceOverride != null && !has ? '<small><s>' + it.p + '</s> deal</small>' : '') + btn + gbtn + '</div>';
   }
 
   function colCard(c) {
@@ -132,6 +133,7 @@
   var TABS = [['offers', 'OFFERS'], ['emote', 'EMOTES'], ['col', 'COLLECTIONS'], ['frame', 'FRAMES'], ['badge', 'BADGES'], ['banner', 'BANNERS']];
   function render(keep) {
     var u = U(), box = document.getElementById('pbox'), old = keep && box.querySelector('.pbody') ? box.querySelector('.pbody').scrollTop : 0, h = '';
+    if (invMode) return renderInv(u, box, old, keep);
     if (tab === 'offers') {
       h += '<p class="note">Today’s deals – 20% off. New deals every day!</p><div class="cgrid">' + offers().map(function (o) { return card(o.kind, o.it, o.price); }).join('') + '</div>' +
         '<p class="note">Best value: collections have skin + character + animation + emote together at 25% off.</p>' +
@@ -143,6 +145,20 @@
     }
     box.innerHTML = '<div class="ph"><span>STORE</span><button class="px" type="button" id="stoX">X</button></div><div class="pbody"><div class="dbal">' + VR.fmtGems(u.gems) + ' 💎</div>' +
       '<div class="tabs" style="overflow-x:auto">' + TABS.map(function (t) { return '<button type="button" class="tab' + (t[0] === tab ? ' on' : '') + '" data-tab="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>' + h + '</div>';
+    if (keep) box.querySelector('.pbody').scrollTop = old;
+  }
+  /* ---------- INVENTORY: only the items the player owns ---------- */
+  var INV_TABS = [['skin', 'SKINS'], ['char', 'CHARACTERS'], ['anim', 'ANIMATIONS'], ['emote', 'EMOTES'], ['frame', 'FRAMES'], ['badge', 'BADGES'], ['banner', 'BANNERS']];
+  function listOf(kind) { return LISTS[kind] || (kind === 'skin' ? VR.cos.SKINS : kind === 'char' ? VR.cos.CHARS : VR.cos.ANIMS); }
+  function renderInv(u, box, old, keep) {
+    var items = listOf(tab).filter(function (it) { return own(tab, it.id) && !(tab === 'frame' && it.id === 'f0'); });
+    var h = '';
+    if (tab === 'anim') h += '<div class="cc sc' + (!u.eq.anim ? ' eq' : '') + '"><div class="spic" style="font-size:calc(var(--u)*6)">&mdash;</div><b>No animation</b><button type="button" class="gb' + (!u.eq.anim ? ' gr' : '') + '" data-a="eq" data-k="anim" data-id="">' + (!u.eq.anim ? 'EQUIPPED' : 'EQUIP') + '</button></div>';
+    h += items.map(function (it) { return card(tab, it); }).join('');
+    box.innerHTML = '<div class="ph"><span>INVENTORY</span><button class="px" type="button" id="stoX">X</button></div><div class="pbody">' +
+      '<div class="tabs" style="overflow-x:auto">' + INV_TABS.map(function (t) { return '<button type="button" class="tab' + (t[0] === tab ? ' on' : '') + '" data-tab="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>' +
+      (tab === 'emote' ? '<p class="note">Choose up to 4 emotes to use in a match. Equipped: ' + u.eq.emotes.length + ' / 4</p>' : '') +
+      (items.length || tab === 'anim' ? '<div class="cgrid">' + h + '</div>' : '<p class="note">You do not own anything here yet. Buy or win items in the STORE.</p>') + '</div>';
     if (keep) box.querySelector('.pbody').scrollTop = old;
   }
   VR.fmtGems = function (n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); };
@@ -168,11 +184,13 @@
       var i = u.eq.emotes.indexOf(id);
       if (i >= 0) { if (u.eq.emotes.length > 1) u.eq.emotes.splice(i, 1); else { VR.ui.toast('Keep at least 1 emote'); return; } }
       else { if (u.eq.emotes.length >= 4) { VR.ui.toast('Only 4 emotes can be equipped'); return; } u.eq.emotes.push(id); }
-    } else if (u.eq[kind] === id && kind !== 'frame') u.eq[kind] = ''; else u.eq[kind] = id;
+    } else if (kind === 'skin' || kind === 'char' || kind === 'anim') u.eq[kind] = id;
+    else if (u.eq[kind] === id && kind !== 'frame') u.eq[kind] = ''; else u.eq[kind] = id;
     VR.auth.save(); refreshLobby(); render(true);
   }
 
-  function open() { tab = 'offers'; render(); document.getElementById('sheet').classList.add('on'); }
+  function open() { invMode = false; tab = 'offers'; render(); document.getElementById('sheet').classList.add('on'); }
+  function openInventory() { invMode = true; tab = 'skin'; render(); document.getElementById('sheet').classList.add('on'); }
   function close() { document.getElementById('sheet').classList.remove('on'); }
 
   document.addEventListener('DOMContentLoaded', function () {
@@ -187,9 +205,10 @@
       else if (a === 'bcol') buyCol(t.dataset.id);
       else if (a === 'eq') equip(t.dataset.k, t.dataset.id);
       else if (a === 'skins') { close(); VR.lobby.openSkins(); }
+      else if (a === 'gift') VR.gift.open(t.dataset.k, t.dataset.id);
     });
   });
 
   window.VR = window.VR || {};
-  VR.store = { open: open, initUser: initUser, decorate: decorate, EMOTES: EMOTES, find: find, own: own };
+  VR.store = { open: open, openInventory: openInventory, initUser: initUser, decorate: decorate, EMOTES: EMOTES, find: find, own: own, invKey: function (k) { return INV[k]; }, give: function (kind, id) { if (!find(kind, id)) return false; grant(kind, id); return true; } };
 })();

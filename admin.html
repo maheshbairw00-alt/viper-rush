@@ -15,7 +15,7 @@ button:disabled{opacity:.5}
 input,select{font:inherit;width:100%;padding:10px;border-radius:10px;border:1px solid #4B3C99;background:#1A1340;color:#fff}
 .card{background:#1A1340;border-radius:14px;padding:12px;margin:10px 0;border:1px solid #3A2C80}
 .row{display:flex;gap:8px;align-items:center}.row>*{flex:1}.row>button{flex:none}
-.tabs{display:flex;gap:8px;margin:8px 0}.tabs button{flex:1;background:#2A2058;color:#EDE9FF}.tabs button.on{background:#FFB11F;color:#3A1A00}
+.tabs{display:flex;gap:8px;margin:8px 0}.tabs button{flex:1;padding:10px 4px;font-size:13px;background:#2A2058;color:#EDE9FF}.tabs button.on{background:#FFB11F;color:#3A1A00}
 .p{display:flex;justify-content:space-between;gap:8px;padding:10px;border-radius:10px;background:#231A55;margin:6px 0}
 .p small{color:#A99BE0;display:block}.tag{background:#FF3B5C;border-radius:99px;padding:1px 8px;font-size:12px;margin-left:6px}
 .hide{display:none}.msg{color:#FFE45C;margin:8px 0;white-space:pre-wrap}
@@ -29,13 +29,64 @@ pre{white-space:pre-wrap;background:#0B0720;border-radius:10px;padding:10px;font
 <div id="app" class="hide">
   <div class="row"><div id="who" style="font-size:13px;color:#A99BE0"></div><button class="g" id="out">Sign out</button></div>
   <div class="msg" id="denied"></div>
-  <div class="tabs"><button id="tp" class="on">PLAYERS</button><button id="tr">REPORTS</button></div>
+  <div class="tabs"><button id="tp" class="on">PLAYERS</button><button id="tr">REPORTS</button><button id="te">EVENTS</button><button id="tm">MAIL</button><button id="tg">ROOMS</button><button id="tl">LIVE</button></div>
 
   <div id="vp">
     <input id="q" placeholder="Search name or player ID" autocomplete="off">
     <div class="msg" id="pinfo"></div>
     <div id="plist"></div>
     <div id="pdet" class="card hide"></div>
+  </div>
+  <div id="ve" class="hide">
+    <div class="card"><b id="etitle">New event</b>
+      <input id="e_title" placeholder="Event name" style="margin-top:8px">
+      <input id="e_desc" placeholder="Short description" style="margin-top:8px">
+      <label style="font-size:12px;color:#A99BE0">Starts</label><input id="e_start" type="datetime-local">
+      <label style="font-size:12px;color:#A99BE0">Ends</label><input id="e_end" type="datetime-local">
+      <input id="e_reward" placeholder="Reward (text), e.g. 500 diamonds" style="margin-top:8px">
+      <textarea id="e_lines" rows="4" placeholder="Updates / details - one per line" style="width:100%;margin-top:8px;font:inherit;padding:10px;border-radius:10px;border:1px solid #4B3C99;background:#1A1340;color:#fff"></textarea>
+      <div class="row" style="margin-top:8px"><button class="ok" id="e_save">SAVE EVENT</button><button class="g" id="e_clear">Clear</button></div>
+      <div class="msg" id="e_msg"></div></div>
+    <div id="elist"></div>
+  </div>
+  <div id="vm" class="hide">
+    <div class="card"><b>Send mail / gift</b>
+      <label style="font-size:12px;color:#A99BE0;display:block;margin-top:8px">Send to</label>
+      <select id="m_to"><option value="all">ALL players</option><option value="one">One player (ID below)</option></select>
+      <input id="m_id" placeholder="Player ID (only for one player)" style="margin-top:8px">
+      <input id="m_title" placeholder="Title" style="margin-top:8px">
+      <input id="m_body" placeholder="Message" style="margin-top:8px">
+      <div class="row" style="margin-top:8px"><input id="m_gems" type="number" placeholder="Diamonds"><input id="m_coins" type="number" placeholder="Coins"><input id="m_xp" type="number" placeholder="XP"></div>
+      <label style="font-size:12px;color:#A99BE0;display:block;margin-top:8px">Mail stays for (days)</label><input id="m_days" type="number" value="14">
+      <button class="ok" id="m_send" style="width:100%;margin-top:8px">SEND</button><div class="msg" id="m_msg"></div></div>
+    <div class="row"><b>Sent mail</b><button class="g" id="m_refresh">Refresh</button></div>
+    <div id="mlist"></div>
+  </div>
+  <div id="vg" class="hide">
+    <div class="card"><b>New custom room / tournament</b>
+      <input id="g_name" placeholder="Name, e.g. Sunday Cup" style="margin-top:8px">
+      <select id="g_kind" style="margin-top:8px"><option value="tournament">Tournament</option><option value="custom">Custom room</option></select>
+      <div class="row" style="margin-top:8px"><input id="g_code" placeholder="Code (empty = auto)" maxlength="12"><input id="g_max" type="number" placeholder="Max players" value="20"></div>
+      <select id="g_world" style="margin-top:8px"><option value="6400">Small map (up to 6 players)</option><option value="16000" selected>Medium map (up to 20)</option><option value="48000">Big map (up to 50)</option></select>
+      <label style="font-size:12px;color:#A99BE0;display:block;margin-top:8px">Start time (empty = 2 min after the first player)</label><input id="g_start" type="datetime-local">
+      <input id="g_entry" type="number" placeholder="Entry fee in diamonds (0 = free)" style="margin-top:8px">
+      <input id="g_prize" placeholder="Prize text, e.g. 1st 5000 diamonds" style="margin-top:8px">
+      <input id="g_rules" placeholder="Rules / info for players" style="margin-top:8px">
+      <button class="ok" id="g_save" style="width:100%;margin-top:8px">CREATE ROOM</button><div class="msg" id="g_msg"></div></div>
+    <div id="glist"></div>
+    <div id="gres" class="card hide"></div>
+  </div>
+  <div id="vl" class="hide">
+    <div class="row"><button class="g" id="l_refresh">Refresh live matches</button></div>
+    <div class="msg" id="l_msg"></div>
+    <div id="l_list"></div>
+    <div id="l_view" class="card hide">
+      <div class="row"><b id="l_title">Live</b><button class="r" id="l_stop" style="flex:none">STOP</button></div>
+      <canvas id="l_cv" width="360" height="360" style="width:100%;border-radius:10px;background:#0B0720;margin-top:8px"></canvas>
+      <div class="row" style="margin-top:8px"><button class="g" id="l_whole">Whole map</button><button class="g" id="l_info" disabled>-</button></div>
+      <div id="l_feed" style="font-size:12px;color:#A99BE0;margin-top:6px;min-height:34px"></div>
+      <div id="l_players"></div>
+    </div>
   </div>
   <div id="vr" class="hide">
     <div class="row"><button class="g" id="rrefresh">Refresh</button><select id="rfilter"><option value="new">New</option><option value="all">All</option></select></div>
@@ -77,11 +128,10 @@ pre{white-space:pre-wrap;background:#0B0720;border-radius:10px;padding:10px;font
   }
 
   function tab(t) {
-    $('tp').classList.toggle('on', t === 'p'); $('tr').classList.toggle('on', t === 'r');
-    $('vp').classList.toggle('hide', t !== 'p'); $('vr').classList.toggle('hide', t !== 'r');
-    if (t === 'r') loadReports();
+    ['p', 'r', 'e', 'm', 'g', 'l'].forEach(function (k) { $('t' + k).classList.toggle('on', t === k); $('v' + k).classList.toggle('hide', t !== k); });
+    if (t === 'r') loadReports(); else if (t === 'e') loadEvents(); else if (t === 'm') loadMail(); else if (t === 'g') loadRooms(); else if (t === 'l') liveList();
   }
-  $('tp').onclick = function () { tab('p'); }; $('tr').onclick = function () { tab('r'); };
+  $('tp').onclick = function () { tab('p'); }; $('tr').onclick = function () { tab('r'); }; $('te').onclick = function () { tab('e'); }; $('tm').onclick = function () { tab('m'); }; $('tg').onclick = function () { tab('g'); }; $('tl').onclick = function () { tab('l'); };
 
   /* ---------- players ---------- */
   function loadPlayers() {
@@ -115,7 +165,7 @@ pre{white-space:pre-wrap;background:#0B0720;border-radius:10px;padding:10px;font
         '<br>Matches ' + (st.matches || 0) + ' &middot; Wins ' + (st.wins || 0) + ' &middot; Kills ' + (st.kills || 0) + '</p>' +
         '<p class="msg" style="margin:0 0 8px">Gifts and bans reach the player the next time they open the game.</p>' +
         gift('gems', 'Diamonds') + gift('coins', 'Coins') + gift('xp', 'XP') +
-        '<div class="card"><b>' + (a.banned ? 'Unban' : 'Ban') + '</b><input id="breason" placeholder="Reason (shown to the player)" value="' + esc(a.banReason || '') + '" style="margin:8px 0">' +
+        '<button class="g" style="width:100%" onclick="mailTo(\''+esc(id)+'\')">SEND MAIL / GIFT TO THIS PLAYER</button>' + '<div class="card"><b>' + (a.banned ? 'Unban' : 'Ban') + '</b><input id="breason" placeholder="Reason (shown to the player)" value="' + esc(a.banReason || '') + '" style="margin:8px 0">' +
         '<button class="' + (a.banned ? 'ok' : 'r') + '" id="bban" style="width:100%">' + (a.banned ? 'UNBAN PLAYER' : 'BAN PLAYER') + '</button></div><div class="msg" id="dmsg"></div>';
       d.scrollIntoView({ behavior: 'smooth' });
       $('dclose').onclick = function () { d.classList.add('hide'); };
@@ -141,6 +191,188 @@ pre{white-space:pre-wrap;background:#0B0720;border-radius:10px;padding:10px;font
       $('dmsg').textContent = on ? 'Player banned.' : 'Player unbanned.'; setTimeout(function () { openPlayer(id); }, 600);
     }).catch(function (e) { $('dmsg').textContent = 'Failed: ' + (e.code || e.message); });
   }
+
+
+  /* ---------- events ---------- */
+  var evs = [], editId = null;
+  function toLocal(t) { var d = new Date(t - new Date().getTimezoneOffset() * 60000); return d.toISOString().slice(0, 16); }
+  function clearEv() { editId = null; $('etitle').textContent = 'New event'; ['e_title', 'e_desc', 'e_reward', 'e_lines'].forEach(function (k) { $(k).value = ''; }); $('e_start').value = toLocal(Date.now()); $('e_end').value = toLocal(Date.now() + 7 * 86400000); }
+  function loadEvents() {
+    if (!$('e_start').value) clearEv();
+    db.collection('viperrush_events').orderBy('start', 'desc').limit(50).get().then(function (snap) {
+      evs = snap.docs.map(function (d) { var e = d.data(); e.id = d.id; return e; }); var n = Date.now(), h = '';
+      evs.forEach(function (e) {
+        var st = n < e.start ? 'COMING' : (n < e.end ? 'LIVE' : 'ENDED');
+        h += '<div class="p"><div><b>' + esc(e.title) + '</b>' + (e.hidden ? '<span class="tag">HIDDEN</span>' : '') + '<small>' + st + ' &middot; ' + new Date(e.start).toLocaleString() + ' &rarr; ' + new Date(e.end).toLocaleString() + '</small></div>' +
+          '<div class="row" style="flex:none"><button class="g" data-a="edit" data-id="' + e.id + '">Edit</button><button class="g" data-a="hide" data-id="' + e.id + '">' + (e.hidden ? 'Show' : 'Hide') + '</button><button class="r" data-a="del" data-id="' + e.id + '">Del</button></div></div>';
+      });
+      $('elist').innerHTML = h || '<p class="msg">No events yet</p>';
+    }).catch(denied);
+  }
+  $('e_clear').onclick = clearEv;
+  $('e_save').onclick = function () {
+    var t = $('e_title').value.trim(), s = new Date($('e_start').value).getTime(), e = new Date($('e_end').value).getTime();
+    if (!t) { $('e_msg').textContent = 'Write the event name'; return; }
+    if (!(s > 0) || !(e > s)) { $('e_msg').textContent = 'Check the start and end time'; return; }
+    var o = { title: t, desc: $('e_desc').value.trim(), start: s, end: e, reward: $('e_reward').value.trim(), lines: $('e_lines').value.split('\n').map(function (x) { return x.trim(); }).filter(Boolean), hidden: false };
+    var ref = editId ? db.collection('viperrush_events').doc(editId).set(o, { merge: true }) : db.collection('viperrush_events').add(Object.assign(o, { ts: Date.now() }));
+    ref.then(function () { $('e_msg').textContent = 'Saved. Players see it when they open EVENTS.'; clearEv(); loadEvents(); }).catch(function (er) { $('e_msg').textContent = 'Failed: ' + (er.code || er.message); });
+  };
+  $('elist').onclick = function (e) {
+    var b = e.target.closest('button'); if (!b) return; var id = b.dataset.id, ev = evs.filter(function (x) { return x.id === id; })[0]; if (!ev) return;
+    if (b.dataset.a === 'edit') {
+      editId = id; $('etitle').textContent = 'Edit event'; $('e_title').value = ev.title || ''; $('e_desc').value = ev.desc || ''; $('e_reward').value = ev.reward || '';
+      $('e_lines').value = (ev.lines || []).join('\n'); $('e_start').value = toLocal(ev.start); $('e_end').value = toLocal(ev.end); window.scrollTo(0, 0);
+    } else if (b.dataset.a === 'hide') db.collection('viperrush_events').doc(id).update({ hidden: !ev.hidden }).then(loadEvents);
+    else if (confirm('Delete this event?')) db.collection('viperrush_events').doc(id).delete().then(loadEvents);
+  };
+
+  /* ---------- mail ---------- */
+  var sent = [];
+  function loadMail() {
+    db.collection('viperrush_mail').orderBy('ts', 'desc').limit(50).get().then(function (snap) {
+      sent = snap.docs.map(function (d) { var m = d.data(); m.id = d.id; return m; }); var h = '';
+      sent.forEach(function (m) {
+        var rw = [m.gems ? m.gems + ' gems' : '', m.coins ? m.coins + ' coins' : '', m.xp ? m.xp + ' xp' : '', m.item && m.item.id ? 'item ' + m.item.id : ''].filter(Boolean).join(', ');
+        h += '<div class="p"><div><b>' + esc(m.title) + '</b><small>' + (m.to === 'all' ? 'ALL players' : 'to ' + esc(m.to)) + (m.fromId ? ' &middot; gift from ' + esc(m.from) : '') + ' &middot; ' + new Date(m.ts).toLocaleString() + (rw ? '<br>' + esc(rw) : '') + '</small></div><button class="r" data-id="' + m.id + '" style="flex:none">Del</button></div>';
+      });
+      $('mlist').innerHTML = h || '<p class="msg">No mail sent yet</p>';
+    }).catch(denied);
+  }
+  $('m_refresh').onclick = loadMail;
+  $('m_send').onclick = function () {
+    var to = $('m_to').value === 'all' ? 'all' : $('m_id').value.trim(), t = $('m_title').value.trim();
+    if (!to) { $('m_msg').textContent = 'Enter the player ID'; return; } if (!t) { $('m_msg').textContent = 'Write a title'; return; }
+    var days = Math.max(1, Math.floor(+$('m_days').value || 14)), now = Date.now();
+    var m = { to: to, title: t, body: $('m_body').value.trim(), gems: Math.floor(+$('m_gems').value || 0), coins: Math.floor(+$('m_coins').value || 0), xp: Math.floor(+$('m_xp').value || 0), from: 'Viper Rush Team', admin: me.email, ts: now, exp: now + days * 86400000 };
+    db.collection('viperrush_mail').add(m).then(function () {
+      $('m_msg').textContent = 'Sent to ' + (to === 'all' ? 'all players' : to) + '.'; ['m_title', 'm_body', 'm_gems', 'm_coins', 'm_xp'].forEach(function (k) { $(k).value = ''; }); loadMail();
+    }).catch(function (er) { $('m_msg').textContent = 'Failed: ' + (er.code || er.message); });
+  };
+  $('mlist').onclick = function (e) { var b = e.target.closest('button'); if (b && confirm('Delete this mail?')) db.collection('viperrush_mail').doc(b.dataset.id).delete().then(loadMail); };
+  window.mailTo = function (id) { $('m_to').value = 'one'; $('m_id').value = id; tab('m'); };
+
+
+  /* ---------- custom rooms / tournaments ---------- */
+  var rooms = [];
+  function newCode() { var c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', o = ''; for (var i = 0; i < 6; i++) o += c[Math.floor(Math.random() * c.length)]; return o; }
+  function loadRooms() {
+    if (!$('g_start').dataset.init) { $('g_start').dataset.init = 1; }
+    db.collection('viperrush_rooms').orderBy('ts', 'desc').limit(50).get().then(function (snap) {
+      rooms = snap.docs.map(function (d) { var r = d.data(); r.code = r.code || d.id; return r; }); var h = '';
+      rooms.forEach(function (r) {
+        h += '<div class="p"><div><b>' + esc(r.name) + '</b> <span class="tag" style="background:' + (r.status === 'open' ? '#16A34A' : '#555') + '">' + esc(r.status) + '</span><small>' + esc(r.kind) + ' &middot; CODE <b style="color:#FFE45C">' + esc(r.code) + '</b> &middot; max ' + r.max + ' &middot; entry ' + (r.entry || 0) + (r.startAt ? '<br>starts ' + new Date(r.startAt).toLocaleString() : '') + (r.prize ? '<br>prize: ' + esc(r.prize) : '') + '</small></div>' +
+          '<div style="flex:none;display:flex;flex-direction:column;gap:6px"><button class="g" data-a="res" data-c="' + esc(r.code) + '">Results</button><button class="g" data-a="tog" data-c="' + esc(r.code) + '">' + (r.status === 'open' ? 'Close' : 'Open') + '</button><button class="r" data-a="del" data-c="' + esc(r.code) + '">Del</button></div></div>';
+      });
+      $('glist').innerHTML = h || '<p class="msg">No rooms yet</p>';
+    }).catch(denied);
+  }
+  $('g_save').onclick = function () {
+    var name = $('g_name').value.trim(); if (!name) { $('g_msg').textContent = 'Write a name'; return; }
+    var code = ($('g_code').value.trim() || newCode()).toUpperCase().replace(/[^A-Z0-9]/g, '');
+    var max = Math.max(2, Math.min(50, Math.floor(+$('g_max').value || 20))), st = $('g_start').value ? new Date($('g_start').value).getTime() : 0;
+    var o = { code: code, name: name, kind: $('g_kind').value, max: max, world: +$('g_world').value, startAt: st > Date.now() ? st : 0, entry: Math.max(0, Math.floor(+$('g_entry').value || 0)), prize: $('g_prize').value.trim(), rules: $('g_rules').value.trim(), status: 'open', ts: Date.now() };
+    db.collection('viperrush_rooms').doc(code).set(o).then(function () {
+      $('g_msg').textContent = 'Room created. Code: ' + code + '. Players see it in CUSTOM ROOM.'; ['g_name', 'g_code', 'g_prize', 'g_rules', 'g_entry'].forEach(function (k) { $(k).value = ''; }); loadRooms();
+    }).catch(function (er) { $('g_msg').textContent = 'Failed: ' + (er.code || er.message); });
+  };
+  $('glist').onclick = function (e) {
+    var b = e.target.closest('button'); if (!b) return; var c = b.dataset.c, r = rooms.filter(function (x) { return x.code === c; })[0]; if (!r) return;
+    if (b.dataset.a === 'tog') db.collection('viperrush_rooms').doc(c).update({ status: r.status === 'open' ? 'closed' : 'open' }).then(loadRooms);
+    else if (b.dataset.a === 'del') { if (confirm('Delete room ' + c + '?')) db.collection('viperrush_rooms').doc(c).delete().then(loadRooms); }
+    else showResults(c);
+  };
+  function showResults(c) {
+    db.collection('viperrush_results').where('room', '==', c).limit(100).get().then(function (snap) {
+      var rows = snap.docs.map(function (d) { return d.data(); }).sort(function (a, b) { return (a.place - b.place) || (b.kills - a.kills); }), box = $('gres'), h = '<div class="row"><b>Results: ' + esc(c) + '</b><button class="g" id="gresx" style="flex:none">Close</button></div>';
+      rows.forEach(function (r, i) {
+        h += '<div class="p"><div><b>#' + r.place + ' ' + esc(r.name) + '</b><small>kills ' + r.kills + ' &middot; score ' + r.score + '</small></div><div class="row" style="flex:none;width:170px"><input type="number" placeholder="gems" id="pz_' + i + '"><button class="ok" data-i="' + i + '">PRIZE</button></div></div>';
+      });
+      box.innerHTML = h + (rows.length ? '' : '<p class="msg">No results yet. They appear after the match ends.</p>') + '<div class="msg" id="gresmsg"></div>';
+      box.classList.remove('hide'); box.scrollIntoView({ behavior: 'smooth' });
+      $('gresx').onclick = function () { box.classList.add('hide'); };
+      box.onclick = function (e) {
+        var b = e.target.closest('button[data-i]'); if (!b) return; var r = rows[+b.dataset.i], n = Math.floor(+$('pz_' + b.dataset.i).value || 0);
+        if (!(n > 0)) { $('gresmsg').textContent = 'Enter the diamonds first'; return; }
+        var now = Date.now();
+        db.collection('viperrush_mail').add({ to: r.uid, title: 'Tournament prize', body: 'Place #' + r.place + ' in ' + c + '. Congratulations!', gems: n, coins: 0, xp: 0, from: 'Viper Rush Team', admin: me.email, ts: now, exp: now + 30 * 86400000 })
+          .then(function () { $('gresmsg').textContent = 'Prize of ' + n + ' diamonds sent to ' + r.name + ' (in their MAIL).'; }).catch(function (er) { $('gresmsg').textContent = 'Failed: ' + (er.code || er.message); });
+      };
+    }).catch(denied);
+  }
+
+  /* ---------- live matches (watch from the game server) ---------- */
+  var ws = null, authed = false, live = null, follow = null, feed = [], rafL = 0, uiT = 0, onReady = [];
+  var CI = ['#B6FF3B', '#FF5A5A', '#38BDF8', '#FFB11F', '#C084FC', '#F472B6'];
+  function serverUp(cb) {
+    if (!VR_CONFIG.serverUrl) { $('l_msg').textContent = 'No game server address in config.js'; return; }
+    if (ws && ws.readyState === 1 && authed) return cb();
+    onReady.push(cb);
+    if (ws && ws.readyState <= 1) return;
+    $('l_msg').textContent = 'Connecting to the server (it may need up to a minute to wake up)...';
+    authed = false; ws = new WebSocket(VR_CONFIG.serverUrl);
+    ws.onopen = function () { me.getIdToken().then(function (t) { ws.send(JSON.stringify({ t: 'admin', token: t })); }); };
+    ws.onmessage = function (e) { var m; try { m = JSON.parse(e.data); } catch (x) { return; } onLive(m); };
+    ws.onclose = function () { authed = false; onReady = []; if (live) { $('l_msg').textContent = 'Connection closed'; } };
+    ws.onerror = function () { $('l_msg').textContent = 'Could not reach the server'; };
+  }
+  function wsend(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
+  function liveList() { serverUp(function () { wsend({ t: 'rooms' }); }); }
+  $('l_refresh').onclick = liveList;
+  function onLive(m) {
+    if (m.t === 'admin') {
+      if (!m.ok) { $('l_msg').textContent = 'The server did not accept this login. Check ADMIN_EMAILS on the server.'; return; }
+      authed = true; $('l_msg').textContent = ''; var q = onReady; onReady = []; q.forEach(function (f) { f(); });
+    } else if (m.t === 'rooms') {
+      var h = ''; m.list.forEach(function (r) {
+        h += '<div class="p"><div><b>Match #' + r.id + (r.code ? ' &middot; ' + esc(r.code) : '') + '</b><small>' + (r.started ? 'LIVE' : 'waiting') + ' &middot; ' + r.n + ' players &middot; ' + esc(r.names.join(', ')) + '</small></div>' +
+          (r.started ? '<button class="ok" data-id="' + r.id + '" style="flex:none">WATCH</button>' : '') + '</div>';
+      });
+      $('l_list').innerHTML = h || '<p class="msg">No match is running right now</p>';
+    } else if (m.t === 'init') {
+      live = { world: m.world, players: {}, id: m.id }; feed = []; follow = null;
+      m.players.forEach(function (q) { live.players[q.id] = { name: q.name, ci: q.ci | 0, code: q.code, uid: q.uid, segs: [], mass: 0, dead: false }; });
+      $('l_view').classList.remove('hide'); $('l_title').textContent = 'Match #' + m.id + (m.code ? ' - ' + m.code : ''); startDraw();
+    } else if (m.t === 's' && live && live.players[m.id]) {
+      var p = live.players[m.id]; p.dead = false; p.mass = m.m; p.segs = m.g;
+    } else if (m.t === 'died' && live && live.players[m.id]) {
+      live.players[m.id].dead = true; var k = live.players[m.by]; feed.unshift(live.players[m.id].name + ' eliminated' + (k ? ' by ' + k.name : '')); feed = feed.slice(0, 3);
+    } else if (m.t === 'left' && live && live.players[m.id]) { live.players[m.id].dead = true; }
+    else if (m.t === 'end') { if (live) { $('l_msg').textContent = 'The match has ended.'; } live = null; $('l_view').classList.add('hide'); cancelAnimationFrame(rafL); }
+  }
+  $('l_list').onclick = function (e) { var b = e.target.closest('button[data-id]'); if (b) wsend({ t: 'watch', room: +b.dataset.id }); };
+  $('l_stop').onclick = function () { wsend({ t: 'unwatch' }); live = null; $('l_view').classList.add('hide'); cancelAnimationFrame(rafL); };
+  $('l_whole').onclick = function () { follow = null; };
+  function startDraw() { cancelAnimationFrame(rafL); var last = 0; (function loop(t) { rafL = requestAnimationFrame(loop); if (!live || t - last < 90) return; last = t; draw(); if (t - uiT > 900) { uiT = t; drawLive(); } })(0); }
+  function draw() {
+    var cv = $('l_cv'), c = cv.getContext('2d'), S = cv.width, W = live.world, cx = W / 2, cy = W / 2, span = W, f = follow && live.players[follow];
+    if (f && f.segs.length >= 2) { cx = f.segs[0]; cy = f.segs[1]; span = Math.min(W, 4000); }
+    var k = S / span, ox = S / 2 - cx * k, oy = S / 2 - cy * k;
+    c.clearRect(0, 0, S, S); c.strokeStyle = '#2A2058'; c.lineWidth = 1;
+    for (var g = 0; g <= 8; g++) { var q = g * W / 8; c.beginPath(); c.moveTo(ox + q * k, oy); c.lineTo(ox + q * k, oy + W * k); c.moveTo(ox, oy + q * k); c.lineTo(ox + W * k, oy + q * k); c.stroke(); }
+    c.strokeStyle = '#FF3B5C'; c.lineWidth = 2; c.strokeRect(ox, oy, W * k, W * k);
+    Object.keys(live.players).forEach(function (id) {
+      var p = live.players[id]; if (p.dead || p.segs.length < 2) return;
+      c.strokeStyle = CI[p.ci % 6]; c.lineWidth = Math.max(2, Math.min(10, (8 + p.mass / 70) * k * 2)); c.lineJoin = c.lineCap = 'round';
+      c.beginPath(); for (var i = 0; i < p.segs.length; i += 2) { var x = ox + p.segs[i] * k, y = oy + p.segs[i + 1] * k; if (i) c.lineTo(x, y); else c.moveTo(x, y); } c.stroke();
+      c.fillStyle = '#fff'; c.beginPath(); c.arc(ox + p.segs[0] * k, oy + p.segs[1] * k, Math.max(2.5, c.lineWidth / 2), 0, 6.3); c.fill();
+      if (follow || W <= 16000) { c.font = '11px system-ui'; c.fillStyle = '#fff'; c.fillText(p.name, ox + p.segs[0] * k + 6, oy + p.segs[1] * k - 6); }
+    });
+  }
+  function drawLive() {
+    var arr = Object.keys(live.players).map(function (id) { var p = live.players[id]; p.id = id; return p; }).sort(function (a, b) { return (a.dead - b.dead) || (b.mass - a.mass); });
+    var alive = arr.filter(function (p) { return !p.dead; }).length;
+    $('l_info').textContent = alive + ' alive / ' + arr.length; $('l_feed').innerHTML = feed.map(esc).join('<br>');
+    $('l_players').innerHTML = arr.map(function (p, i) {
+      return '<div class="p" style="' + (p.dead ? 'opacity:.45' : '') + '"><div><b style="color:' + CI[p.ci % 6] + '">' + (i + 1) + '. ' + esc(p.name) + '</b><small>' + Math.floor(p.mass * 10) + ' score' + (p.dead ? ' &middot; out' : '') + '</small></div>' +
+        '<div class="row" style="flex:none"><button class="g" data-f="' + p.id + '">Follow</button>' + (p.uid ? '<button class="r" data-b="' + esc(p.uid) + '" data-n="' + esc(p.name) + '">Ban</button>' : '') + '</div></div>';
+    }).join('');
+  }
+  $('l_players').onclick = function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.f) follow = b.dataset.f;
+    else if (b.dataset.b && confirm('Ban ' + b.dataset.n + '?')) db.collection('viperrush_admin').doc(b.dataset.b).set({ banned: true, banReason: 'Banned by admin', bannedBy: me.email, bannedAt: Date.now() }, { merge: true }).then(function () { alert('Banned. They are blocked when they open the game next.'); });
+  };
 
   /* ---------- reports ---------- */
   function loadReports() {

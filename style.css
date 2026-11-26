@@ -125,7 +125,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--cyan);outline-o
 .start{height:calc(var(--u)*10.5);border-radius:calc(var(--u)*3.4);background:linear-gradient(180deg,#FFE45C,#FFB11F 55%,#FF7A00);color:#5A2200;font-weight:700;font-size:calc(var(--u)*5.6);letter-spacing:.1em;box-shadow:0 0 22px rgba(255,177,31,.5),inset 0 0 0 2.5px #FFF3B0,inset 0 -4px 0 rgba(0,0,0,.14);animation:beat 2s ease-in-out infinite}
 .start:active{transform:scale(.97)}
 .bottom{grid-area:bottom;display:flex;justify-content:center;align-items:center;gap:calc(var(--u)*2.4)}
-.nav{width:calc(var(--u)*24);height:calc(var(--u)*8);border-radius:calc(var(--u)*3);background:rgba(255,255,255,.14);box-shadow:inset 0 0 0 2px rgba(255,255,255,.6);font-weight:700;font-size:calc(var(--u)*2.9);letter-spacing:.08em}
+.nav{width:calc(var(--u)*21);height:calc(var(--u)*8);border-radius:calc(var(--u)*3);background:rgba(255,255,255,.14);box-shadow:inset 0 0 0 2px rgba(255,255,255,.6);font-weight:700;font-size:calc(var(--u)*2.9);letter-spacing:.08em}
 
 /* ---------- panels: friends, guild, profile ---------- */
 .sheet{position:absolute;inset:0;z-index:18;display:none;align-items:center;justify-content:center;background:rgba(10,0,36,.68);padding:calc(var(--u)*2)}
@@ -406,3 +406,16 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--cyan);outline-o
 .emopanel.on{display:flex}
 .emopanel button{width:calc(var(--u)*9);height:calc(var(--u)*9);border-radius:50%;background:rgba(255,255,255,.12);font-size:calc(var(--u)*5)}
 #game.sp .gemo,#game.sp .emopanel{display:none}
+
+/* ---- events + mail ---- */
+.side.has{position:relative}.side.has::after{content:"";position:absolute;top:calc(var(--u)*-.6);right:calc(var(--u)*-.4);width:calc(var(--u)*3.2);height:calc(var(--u)*3.2);border-radius:50%;background:#FF3B5C;box-shadow:0 0 0 2px #fff}
+.evc{background:rgba(255,255,255,.1);border-radius:calc(var(--u)*3);padding:calc(var(--u)*2.2) calc(var(--u)*2.6);margin:calc(var(--u)*1.4) 0;display:flex;flex-direction:column;gap:calc(var(--u)*.9)}
+.evc.live{box-shadow:inset 0 0 0 2px #B6FF3B}.evc.ended,.evc.read{opacity:.7}
+.evc p{margin:0;font-size:calc(var(--u)*2.9);color:#EDE6FF}.evc small{font-size:calc(var(--u)*2.5);color:#D9CCFF;font-weight:600}
+.evc ul{margin:0;padding-left:calc(var(--u)*4);font-size:calc(var(--u)*2.8);color:#EDE6FF}
+.evh{display:flex;justify-content:space-between;align-items:center;gap:calc(var(--u)*2)}.evh b{font-size:calc(var(--u)*3.4)}
+.evs{font-style:normal;font-size:calc(var(--u)*2.4);font-weight:700;padding:calc(var(--u)*.6) calc(var(--u)*1.8);border-radius:99px;white-space:nowrap}
+.evs.on{background:#B6FF3B;color:#1C3300}.evs.soon{background:#FFB11F;color:#3A1A00}.evs.end{background:rgba(255,255,255,.2)}
+.evr{font-size:calc(var(--u)*2.6);color:#FFE45C;font-weight:700;letter-spacing:.05em}
+.evc .gb{align-self:flex-start}
+.gft{margin-top:calc(var(--u)*.8);min-width:0;width:100%;background:rgba(236,72,153,.25);color:#FBCFE8;box-shadow:inset 0 0 0 1.5px #EC4899}

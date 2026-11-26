@@ -539,6 +539,7 @@
       if (own) btn = eqid === x.id ? '<button class="gb dis" type="button" disabled>EQUIPPED</button>' : '<button class="gb" type="button" data-a="ceq" data-id="' + x.id + '">EQUIP</button>';
       else if (x.pass) btn = '<button class="gb pk" type="button" data-a="openmem">SEASON PASS</button>';
       else btn = '<button class="gb pk" type="button" data-a="cbuy" data-id="' + x.id + '">' + DIA + ' ' + x.p + '</button>';
+      if (!x.pass && x.p > 0) btn += '<button class="gb pk gft" type="button" data-a="cgift" data-id="' + x.id + '">GIFT 🎁</button>';
       h += '<div class="cc' + (x.L ? ' L' : '') + (own && eqid === x.id ? ' eq' : '') + '">' + pic + '<b>' + esc(x.n) + '</b><small>' + sub + '</small>' + btn + '</div>';
     });
     h += '</div></div>';
@@ -621,6 +622,7 @@
       else { user.gems -= it.p; user.inv[INVKEY[ctab]][it.id] = true; user.eq[ctab] = it.id; saveUser(); renderProfile(); renderSlots(); VR.ui.toast(it.n + ' unlocked and equipped!'); }
       openCosmetics(true);
     }
+    else if (a === 'cgift') VR.gift.open(ctab, t.dataset.id);
     else if (a === 'openmem') openMembership();
     else if (a === 'joinmem') {
       if (user.pass) return;
@@ -713,6 +715,7 @@
     if (VR.settings) VR.settings.apply();
     renderProfile(); renderSlots();
     VR.app.go('lobby');
+    if (VR.inbox) VR.inbox.refresh();
   }
 
   function init() {
@@ -734,7 +737,11 @@
     $('ranksBtn').addEventListener('click', openRanks);
     $('skinsBtn').addEventListener('click', function () { openCosmetics(); });
     $('storeBtn').addEventListener('click', function () { VR.store.open(); });
+    $('roomBtn').addEventListener('click', function () { VR.rooms.open(); });
+    $('invBtn').addEventListener('click', function () { VR.store.openInventory(); });
     $('memBtn').addEventListener('click', openMembership);
+    $('eventsBtn').addEventListener('click', function () { VR.inbox.openEvents(); });
+    $('mailBtn').addEventListener('click', function () { VR.inbox.openMail(); });
     $('codeBtn').addEventListener('click', function () { copyText(code, 'Team code ' + code + ' copied'); });
     $('enterBtn').addEventListener('click', openEnterCode);
     $('modeBtn').addEventListener('click', function () {
@@ -766,5 +773,5 @@
 
   window.VR = window.VR || {};
   VR.sound = true;
-  VR.lobby = { init: init, enter: enter, levelInfo: levelInfo, openSkins: function () { openCosmetics(); }, openUser: function () { return user; }, decorate: function () { renderProfile(); renderSlots(); }, recordGame: recordGame, refresh: function () { if (user) { renderProfile(); renderSlots(); } } };
+  VR.lobby = { soloCfg: function () { return { mode: 'solo', squad: [{ name: user.name, you: true }], user: user }; }, init: init, enter: enter, levelInfo: levelInfo, openSkins: function () { openCosmetics(); }, openUser: function () { return user; }, decorate: function () { renderProfile(); renderSlots(); }, recordGame: recordGame, refresh: function () { if (user) { renderProfile(); renderSlots(); } } };
 })();

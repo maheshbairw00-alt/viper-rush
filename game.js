@@ -42,6 +42,7 @@
   }
   function onNet(m) {
     if (!NET) return;
+    if (m.t === 'rtc') { if (VR.rtc) VR.rtc.onMsg(m); return; }
     var rs = m.id ? byNet[m.id] : null, i;
     if (m.t === 's' && rs) {
       rs.dead = false; rs.mass = m.m; rs.boost = !!m.b; rs.hp = m.h; rs.angle = m.a; rs.r = radiusOf(rs); rs.netSegs = m.g;
@@ -540,6 +541,7 @@
         rs.remote = true; rs.netId = q.id; rs.uid = q.uid || ''; byNet[q.id] = rs; snakes.push(rs);
       });
       VR.net.onGame = onNet;
+      if (VR.rtc) VR.rtc.start(NET);
       hadEnemy = snakes.some(function (x) { return x.remote && !x.mate; });
     }
     var nBots = NET ? 0 : Math.max(0, (G.maxPlayers || 50) - 1 - mates.length);
@@ -555,11 +557,11 @@
     cancelAnimationFrame(raf); raf = requestAnimationFrame(frame);
   }
 
-  function stop() { running = false; cancelAnimationFrame(raf); if (NET) { VR.net.onGame = null; VR.net.close(); } }
+  function stop() { running = false; cancelAnimationFrame(raf); if (VR.rtc) VR.rtc.stop(); if (NET) { VR.net.onGame = null; VR.net.close(); } }
 
   function endGame(kind) {
     if (over) return;
-    over = true; leaveSpec(); if (NET) { VR.net.onGame = null; VR.net.close(); }
+    over = true; leaveSpec(); if (VR.rtc) VR.rtc.stop(); if (NET) { VR.net.onGame = null; VR.net.close(); }
     var alive = snakes.filter(function (s) { return !s.dead; });
     var place;
     if (kind === 'win') place = 1;
@@ -572,6 +574,7 @@
     $('resTitle').textContent = win ? (squadWin ? 'SQUAD KINGS!' : 'VIPER KING!') : (kind === 'time' ? 'TIME UP' : 'YOU DIED');
     $('resCard').classList.toggle('win', win);
     $('resScore').textContent = score;
+    if (NET && NET.room && VR.auth && VR.auth.submitResult) VR.auth.submitResult({ room: NET.room, place: place, kills: kills, score: score });
     $('resInfo').textContent = 'Place #' + place + '  |  Kills ' + kills + '  |  Orbs ' + orbs;
     $('resRewards').textContent = res ? ('+' + res.coins + ' COINS   +' + res.xp + ' XP   ' + (res.rp >= 0 ? '+' : '') + res.rp + ' RP') : '';
     if (win && anim && anim.t === 'win' && !player.dead) { winFx = 2; for (var i = 0; i < 40; i++) { var a = Math.random() * 6.283, v = rnd(80, 300), h = player.segs[0]; parts.push({ x: h.x, y: h.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 80, l: 1.6, ml: 1.6, c: 'hsl(' + ((Math.random() * 360) | 0) + ',85%,60%)', r: rnd(3, 6) }); } }
@@ -725,6 +728,12 @@
   function drawSnake(s, vx0, vy0, vx1, vy1, t) {
     var sk = s.skin, n = s.segs.length, r = s.r, i, g, ty = sk.t, A = sk.a;
     if (s.boost || s.fx.sp > 0) { ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = 'rgba(' + A.join(',') + ',.10)'; for (i = n - 1; i >= 0; i -= 2) { g = s.segs[i]; ctx.beginPath(); ctx.arc(g.x, g.y, r * 1.8, 0, 6.283); ctx.fill(); } ctx.globalCompositeOperation = 'source-over'; }
+    var hq3 = !VR.settings || VR.settings.get('quality') !== 'low';
+    if (hq3) {                                            // soft ground shadow (3D look)
+      ctx.fillStyle = 'rgba(0,0,0,.24)'; ctx.beginPath();
+      for (i = n - 1; i >= 0; i -= 2) { g = s.segs[i]; if (g.x < vx0 - r * 2 || g.x > vx1 + r * 2 || g.y < vy0 - r * 2 || g.y > vy1 + r * 2) continue; var sr0 = r * (.55 + .45 * Math.pow(1 - i / n, .5)); ctx.moveTo(g.x + r * .34 + sr0, g.y + r * .46); ctx.arc(g.x + r * .34, g.y + r * .46, sr0, 0, 6.283); }
+      ctx.fill();
+    }
     ctx.lineWidth = 1.4; ctx.strokeStyle = 'rgba(2,10,24,.55)';
     var spiky = ty === 'sp' || ty === 'fl' || ty === 'mg';
     for (i = n - 1; i >= 0; i--) {
@@ -743,6 +752,11 @@
       else if (ty === 'mg' && i % 2) { ctx.fillStyle = '#FFB347'; ctx.beginPath(); ctx.arc(g.x, g.y, rr * .35, 0, 6.283); ctx.fill(); }
       else if (ty === 'bn' && i % 2 === 0) { ctx.fillStyle = '#F2F2F8'; ctx.fillRect(g.x - 1.3, g.y - rr * .8, 2.6, rr * 1.6); }
       else if (ty === 'th' && i % 5 === 2) { ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.moveTo(g.x + 2, g.y - rr); ctx.lineTo(g.x - 2, g.y); ctx.lineTo(g.x + 2, g.y); ctx.lineTo(g.x - 2, g.y + rr); ctx.stroke(); ctx.strokeStyle = 'rgba(2,10,24,.55)'; }
+    }
+    if (hq3) {                                            // light along the top of the body (looks round)
+      ctx.fillStyle = 'rgba(255,255,255,.17)'; ctx.beginPath();
+      for (i = n - 1; i >= 1; i--) { g = s.segs[i]; if (g.x < vx0 - r * 2 || g.x > vx1 + r * 2 || g.y < vy0 - r * 2 || g.y > vy1 + r * 2) continue; var hr0 = r * (.55 + .45 * Math.pow(1 - i / n, .5)) * .5; ctx.moveTo(g.x - hr0 * .5 + hr0, g.y - hr0 * .7); ctx.arc(g.x - hr0 * .5, g.y - hr0 * .7, hr0, 0, 6.283); }
+      ctx.fill();
     }
     var h = s.segs[0], hr = r * 1.12, ch = s.ch;
     ctx.save(); ctx.translate(h.x, h.y); ctx.rotate(s.angle);
@@ -794,6 +808,8 @@
     ctx.fillStyle = Z[2].floor; ctx.fillRect(hw, 0, hw, hw);
     ctx.fillStyle = Z[3].floor; ctx.fillRect(0, hw, hw, hw);
     ctx.fillStyle = Z[4].floor; ctx.fillRect(hw, hw, hw, hw);
+    var hq = !VR.settings || VR.settings.get('quality') !== 'low';
+    if (hq && VR.terrain) VR.terrain.ground(ctx, vx0, vy0, vx1, vy1, WORLD);
     var gg = ctx.createRadialGradient(hw, hw, 0, hw, hw, GOLD_R);
     gg.addColorStop(0, '#6B5410'); gg.addColorStop(.8, Z[0].floor); gg.addColorStop(1, 'rgba(58,46,10,.0)');
     ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(hw, hw, GOLD_R, 0, 6.283); ctx.fill();
@@ -814,8 +830,10 @@
       ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.lineWidth = 8; ctx.setLineDash([60, 50]); ctx.beginPath(); ctx.arc(px, py, PR, 0, 6.283); ctx.stroke(); ctx.setLineDash([]);
       ctx.font = '800 64px Rajdhani, sans-serif'; ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillText(pl.n.toUpperCase(), px, py + 22);
     }
+    if (hq && VR.terrain) VR.terrain.props(ctx, vx0, vy0, vx1, vy1, WORLD, GOLD_R, sc);
     for (i = 0; i < rocks.length; i++) {
       var rk = rocks[i]; if (rk.x < vx0 - rk.r || rk.x > vx1 + rk.r || rk.y < vy0 - rk.r || rk.y > vy1 + rk.r) continue;
+      ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(rk.x + rk.r * .25, rk.y + rk.r * .32, rk.r * 1.03, rk.r * .92, 0, 0, 6.283); ctx.fill();
       ctx.fillStyle = '#4B5575'; ctx.strokeStyle = '#2A3150'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(rk.x, rk.y, rk.r, 0, 6.283); ctx.fill(); ctx.stroke();
       ctx.fillStyle = 'rgba(255,255,255,.14)'; ctx.beginPath(); ctx.arc(rk.x - rk.r * .25, rk.y - rk.r * .3, rk.r * .5, 0, 6.283); ctx.fill();
     }
@@ -881,6 +899,7 @@
       ctx.fillRect(0, sr.y0, sr.x0, sr.y1 - sr.y0); ctx.fillRect(sr.x1, sr.y0, WORLD - sr.x1, sr.y1 - sr.y0);
       ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 8; ctx.strokeRect(sr.x0, sr.y0, sr.x1 - sr.x0, sr.y1 - sr.y0);
     }
+    if (hq && VR.terrain) { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); VR.terrain.vignette(ctx, W, H); }
   }
 
   /* ---------- loop ---------- */

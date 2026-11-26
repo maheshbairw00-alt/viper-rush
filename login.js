@@ -44,8 +44,15 @@
     saveT = setTimeout(function () {
       var data = JSON.parse(JSON.stringify(u)); delete data.id;
       col().doc(u.id).set({ profile: data }, { merge: true }).catch(warn);
+      col2('viperrush_ids').doc(pidOf(u.id)).set({ uid: u.id, name: u.name || 'Player', own: ownList(u) }).catch(warn);   // lets friends find you to send gifts
     }, 1500);
   }
+  // the 10-digit player ID that players see and share (same maths as the lobby)
+  function pidOf(id) {
+    var h = 7; id = String(id); for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+    var n = String(h * 7919 % 10000000000); while (n.length < 10) n = '0' + n; return n;
+  }
+  function ownList(u) { var out = []; Object.keys(u.inv || {}).forEach(function (k) { Object.keys(u.inv[k] || {}).forEach(function (id) { if (u.inv[k][id]) out.push(k + ':' + id); }); }); return out; }
   function col2(name) { return fb().firestore().collection(name); }
   // Admin panel: gifts (diamonds / coins / XP) and bans are written to viperrush_admin/<player id>. The game applies them here.
   function applyGrants(user, d) {
@@ -122,6 +129,21 @@
       socialT = setTimeout(function () {
         col().doc(u.id).set({ social: JSON.parse(JSON.stringify(obj)) }, { merge: true }).catch(warn);
       }, 1500);
+    },
+    // gifts: find a player by the 10-digit ID, and send a gift mail
+    lookupPid: function (pid) {
+      return col2('viperrush_ids').doc(String(pid)).get().then(function (d) { return d.exists ? d.data() : null; });
+    },
+    sendMail: function (m) {
+      var u = auth.user; if (!isReal(u)) return Promise.reject(new Error('login'));
+      m.from = u.name || 'Player'; m.fromId = u.id; m.type = 'gift'; m.ts = Date.now(); m.exp = m.ts + 30 * 86400000;
+      return col2('viperrush_mail').add(m);
+    },
+    // tournament / custom room result (the admin sees it and gives the prize)
+    submitResult: function (o) {
+      var u = auth.user; if (!isReal(u) || !o || !o.room) return;
+      var d = { room: o.room, uid: u.id, name: u.name || 'Player', place: o.place | 0, kills: o.kills | 0, score: o.score | 0, ts: Date.now() };
+      col2('viperrush_results').doc(o.room + '_' + u.id).set(d).catch(warn);
     },
     // a player sends a report (shown in the admin panel)
     report: function (o) {
@@ -202,5 +224,6 @@
 
   window.VR = window.VR || {};
   VR.auth = auth;
+  VR.pidOf = pidOf;
   VR.login = { init: init };
 })();
