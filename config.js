@@ -24,6 +24,9 @@ window.VR_CONFIG = {
   squadSize: 5,        // players in one squad (you + 4 friends)
   loadingSeconds: 2.6, // fake loading time (replace with real asset loading later)
 
+  // Address of your game server, for example 'wss://viper-rush-server.onrender.com'. Leave '' to play offline with bots.
+  serverUrl: '',
+
   game: {
     worldSize: 48000,      // arena is worldSize x worldSize (HUGE map with 5 zones). Change it here to make the map smaller/bigger
     maxPlayers: 50,        // players in one match (you + friends + bots fill the rest)

@@ -68,12 +68,23 @@
   function isFriend(name) { return social.friends.some(function (f) { return f.name === name; }); }
 
   /* ---------- player stats, danger rating ---------- */
+  /* ---------- levels: XP needed for each level (no maximum level) ---------- */
+  // every group of 5 levels needs the same XP; after the list ends it doubles every 5 levels.
+  var XP_STEPS = [200, 500, 1000, 2000, 3000, 4000, 5000, 6000, 10000, 20000, 25000, 100000, 200000, 300000];
+  function xpForLevel(L) { var t = Math.floor((L - 1) / 5); return t < XP_STEPS.length ? XP_STEPS[t] : XP_STEPS[XP_STEPS.length - 1] * Math.pow(2, t - XP_STEPS.length + 1); }
+  function levelInfo(xp) {
+    var L = 1, left = Math.max(0, xp || 0), need = xpForLevel(1);
+    while (left >= need && L < 100000) { left -= need; L++; need = xpForLevel(L); }
+    return { level: L, cur: left, need: need, pct: Math.min(100, left / need * 100) };
+  }
+
   function initUser() {
     user.stats = user.stats || { wins: 0, kills: 0, best: 0, matches: 0, bestRank: 0 };
     user.likes = user.likes || 0;
     user.xp = user.xp || 0;
     user.skin = user.skin || 0;
-    user.level = Math.max(user.level || 1, 1 + Math.floor(user.xp / 500));
+    if (user.xpv !== 2) { user.xpv = 2; user.xp = 0; }           // new level system: everyone starts again from level 1
+    user.level = levelInfo(user.xp).level;
     user.coins = user.coins == null ? 500 : user.coins;
     user.gems = user.gems == null ? 20 : user.gems;
     user.inv = user.inv || { skins: { s0: true }, chars: { c0: true }, anims: {} };
@@ -152,8 +163,11 @@
     s.matches++; s.kills += g.kills; s.best = Math.max(s.best, g.score);
     if (g.win) s.wins++;
     s.bestRank = s.bestRank ? Math.min(s.bestRank, g.rank) : g.rank;
-    var xp = Math.floor(g.score / 10) + g.kills * 5 + (g.win ? 150 : 0), coins = Math.floor(g.score / 40) + (g.win ? 50 : 0);
-    user.xp += xp; user.level = 1 + Math.floor(user.xp / 500); user.coins += coins;
+    // XP: survival time counts most, kills a little, plus a bonus for the final rank / win
+    var mins = Math.min(20, (g.time || 0) / 60), xp = Math.round(mins * 6) + g.kills * 3 + (g.win ? 80 : g.rank <= 3 ? 40 : g.rank <= 10 ? 20 : 0);
+    xp = Math.max(5, xp);
+    var coins = Math.floor(g.score / 40) + (g.win ? 50 : 0);
+    user.xp += xp; user.level = levelInfo(user.xp).level; user.coins += coins;
     var old = user.rp[key], floor = old >= LEGEND_RP ? LEGEND_RP : Math.floor(old / 300) * 300;
     var nw = Math.max(floor, old + rpGain(g)); user.rp[key] = nw;
     addProgress(g); saveUser();
@@ -222,7 +236,7 @@
     $('meName').textContent = user.name;
     $('meLv').textContent = 'LV ' + user.level;
     if (VR.store) VR.store.decorate(user);
-    $('meXp').style.width = ((user.xp % 500) / 5) + '%';
+    $('meXp').style.width = levelInfo(user.xp).pct + '%';
     $('coins').textContent = fmt(user.coins);
     $('gems').textContent = fmt(user.gems);
     $('codeText').textContent = code;
@@ -335,7 +349,24 @@
       ]
     });
   }
+  // online matchmaking (only when a server address is set in config.js)
+  function findOnline(cfg0) {
+    var cancelled = false;
+    VR.ui.modal({ title: 'FINDING PLAYERS', html: '<p id="mmTxt">Connecting to the server... (the first time it can take up to a minute)</p>', actions: [
+      { label: 'CANCEL', onClick: function () { cancelled = true; VR.net.close(); } }
+    ] });
+    function go(msg, text) { if (cancelled) return; VR.ui.closeModal(); if (text) VR.ui.toast(text); if (msg) cfg0.net = msg; VR.app.startGame(cfg0); }
+    VR.net.find({ name: user.name, skin: user.eq.skin, ch: user.eq.char, ci: user.skin || 0, code: mode === 'squad' ? code : '' }, {
+      wait: function (n, max, left) { var t = $('mmTxt'); if (t) t.textContent = 'Players found: ' + n + ' / ' + max + '  -  match starts in ' + left + 's'; },
+      start: function (msg) { go(msg); },
+      solo: function () { go(null, 'No other players found - playing with bots'); },
+      fail: function () { go(null, 'Server not reachable - playing with bots'); }
+    });
+  }
   function joinTeam(v) {
+    if (VR.net && VR.net.enabled()) {                       // online: friends with the same code land in the same match
+      code = v; mode = 'squad'; renderProfile(); VR.ui.toast('Team code ' + v + ' set. Both of you press START together'); return;
+    }
     // NETWORK HOOK: ask your server to put this player into the lobby that owns code v.
     // OFFLINE DEMO: you land in a demo lobby with the code owner.
     var host = randName();
@@ -567,7 +598,7 @@
     var h = head(me ? 'MY PROFILE' : 'PLAYER PROFILE') + '<div class="pbody prof"><div class="pl">' +
       '<i class="avb" style="--c:' + COLS[color % COLS.length][0] + '">' + esc(name.charAt(0).toUpperCase()) + '</i>' +
       '<b class="pn">' + esc(name) + '</b><span class="pid">ID: ' + (me ? userId() : (function () { var n = String(hash(name) * 7919 % 10000000000); while (n.length < 10) n = '0' + n; return n.slice(0, 4) + ' ' + n.slice(4, 8) + ' ' + n.slice(8); })()) + '</span>' +
-      '<span class="lvb">LV ' + lvl + '</span>' + (me ? '<div class="xp"><i style="width:' + ((user.xp % 500) / 5) + '%"></i></div>' : '') + '</div>' +
+      '<span class="lvb">LV ' + lvl + '</span>' + (me ? '<div class="xp"><i style="width:' + levelInfo(user.xp).pct + '%"></i></div>' : '') + '</div>' +
       '<div class="pr"><div class="danger">' + shield + '<div class="dtx"><b style="color:#FF6B4A">' + dg.tier + '</b><small>DANGER LEVEL ' + dg.pct + '%</small><div class="dbar"><i style="width:' + dg.pct + '%"></i></div></div></div>' +
       '<div class="likes">' + heart + '<div><b>' + fmt(likes) + '</b><small>' + (me ? 'LIKES RECEIVED' : 'LIKES') + '</small></div>' + likeBtn + '</div>' +
       '<div class="sgrid">' + stats.map(function (x) { return '<div class="st3"><b>' + x[1] + '</b><small>' + x[0] + '</small></div>'; }).join('') + '</div>' +
@@ -728,12 +759,12 @@
     $('settingsBtn').addEventListener('click', openSettings);
     $('startBtn').addEventListener('click', function () {
       $('chat').classList.remove('on'); closeSheet();
-      // NETWORK HOOK: start matchmaking with your party here.
-      VR.app.startGame({ mode: mode, squad: squad.filter(Boolean), user: user });
+      var cfg0 = { mode: mode, squad: squad.filter(Boolean), user: user };
+      if (VR.net && VR.net.enabled()) findOnline(cfg0); else VR.app.startGame(cfg0);
     });
   }
 
   window.VR = window.VR || {};
   VR.sound = true;
-  VR.lobby = { init: init, enter: enter, openSkins: function () { openCosmetics(); }, openUser: function () { return user; }, decorate: function () { renderProfile(); renderSlots(); }, recordGame: recordGame, refresh: function () { if (user) { renderProfile(); renderSlots(); } } };
+  VR.lobby = { init: init, enter: enter, levelInfo: levelInfo, openSkins: function () { openCosmetics(); }, openUser: function () { return user; }, decorate: function () { renderProfile(); renderSlots(); }, recordGame: recordGame, refresh: function () { if (user) { renderProfile(); renderSlots(); } } };
 })();

@@ -23,6 +23,48 @@
     .map(function (p) { return { a: hex(p[0]), b: hex(p[1]), css: p[0] }; });
 
   var lastPlace = '';
+  /* ---------- online match (see js/net.js and the server folder) ---------- */
+  var NET = null, hadEnemy = false, byNet = {}, staticFoods = [], eatQ = [], dseq = 0, netT = 0;
+  function prng(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function respawnStatic(f) {                              // an orb that was eaten comes back at a place every player calculates the same
+    f.rc = (f.rc || 0) + 1;
+    var mr = Math.random; Math.random = prng((NET.seed ^ Math.imul(f.id + 1, 2654435761) ^ Math.imul(f.rc, 40503)) >>> 0);
+    var p = randInZone(f.z); f.x = p.x; f.y = p.y; f.v = baseFoodV(f.z); f.r = 3 + f.v * 1.4; f.ci = (Math.random() * PAL.length) | 0;
+    Math.random = mr;
+  }
+  function removeDrop(id) { for (var i = foods.length - 1; i >= 0; i--) if (foods[i].id === id) { foods[i] = foods[foods.length - 1]; foods.pop(); return; } }
+  function stepRemote(s, dt) {
+    if (s.emo) { s.emo.t -= dt; if (s.emo.t <= 0) s.emo = null; }
+    var tg = s.netSegs; if (!tg) return;
+    var n = tg.length / 2, k = Math.min(1, dt * 14), i;
+    if (s.segs.length !== n) { s.segs = []; for (i = 0; i < n; i++) s.segs.push({ x: tg[2 * i], y: tg[2 * i + 1] }); return; }
+    for (i = 0; i < n; i++) { var g = s.segs[i]; g.x += (tg[2 * i] - g.x) * k; g.y += (tg[2 * i + 1] - g.y) * k; }
+  }
+  function onNet(m) {
+    if (!NET) return;
+    var rs = m.id ? byNet[m.id] : null, i;
+    if (m.t === 's' && rs) {
+      rs.dead = false; rs.mass = m.m; rs.boost = !!m.b; rs.hp = m.h; rs.angle = m.a; rs.r = radiusOf(rs); rs.netSegs = m.g;
+    } else if (m.t === 'eat') {
+      for (i = 0; i < m.ids.length; i++) { var id = m.ids[i]; if (typeof id === 'number') { if (staticFoods[id]) respawnStatic(staticFoods[id]); } else removeDrop(id); }
+    } else if (m.t === 'drop') {
+      for (i = 0; i < m.f.length; i++) { var d = m.f[i]; foods.push({ x: d[0], y: d[1], v: d[2], r: 3 + d[2] * 1.4, ci: d[3], keep: false, z: zoneAt(d[0], d[1]), id: d[4] }); }
+    } else if (m.t === 'died' && rs && !rs.dead) {
+      rs.dead = true;
+      if (m.by === NET.you && !over) { kills++; $('hudKills').textContent = kills; banner('You eliminated ' + rs.name, 1800); if (anim && anim.t === 'burst') burst(rs.segs[0].x, rs.segs[0].y, anim.c, 22); }
+    } else if (m.t === 'emo' && rs) { rs.emo = { e: m.e, t: 3 };
+    } else if (m.t === 'left' && rs) { rs.dead = true;
+    } else if (m.t === 'closed' && running && !over) { banner('Connection lost - you play on alone', 3000); }
+  }
+  function netTick(dt) {
+    if (!NET) return;
+    netT += dt; if (netT < .083) return; netT = 0;
+    if (eatQ.length) { VR.net.send({ t: 'eat', ids: eatQ }); eatQ = []; }
+    if (player.dead) return;
+    var g = [], i, sg = player.segs;
+    for (i = 0; i < sg.length; i++) { g.push(Math.round(sg[i].x), Math.round(sg[i].y)); }
+    VR.net.send({ t: 's', a: +player.angle.toFixed(2), m: +player.mass.toFixed(1), b: player.boost ? 1 : 0, h: Math.round(player.hp), g: g });
+  }
   var FOOD_K = 2.3;      // orb amount per zone = zone count x this (few orbs, big gaps)
   var Z = [
     { n: 'GOLD CORE', floor: '#3A2E0A', map: '#C9A227', m: 1.6, count: 260, note: 'rich orbs, big coins' },
@@ -43,7 +85,7 @@
   var golden = null, nextGold = 0, player = null, cfg = null, zc = { x: 0, y: 0 };
   var running = false, paused = false, over = false, raf = 0, last = 0, uid = 0, kills = 0, orbs = 0, lbT = 0, talkT = 0, hudT = 0, winT = 0;
   var matchT = 0, tAcc = 0, mapOpen = false, flags = {}, bannerT = 0, myCoins = 0, rv = { auto: false, heart: false };
-  var heal = { casting: false, t: 0, size: 's', cd: 0 }, anim = null, trailT = 0, deadPlace = 0, killerName = '', winFx = 0;
+  var heal = { casting: false, t: 0, size: 's', cd: 0 }, anim = null, trailT = 0, deadPlace = 0, diedT = 0, killerName = '', winFx = 0;
   var spec = { on: false, idx: 0, liked: {}, reported: false };
   var cam = { x: 0, y: 0, s: 1 };
   var input = { angle: 0, mag: 0, touch: false, boost: false, keys: {}, mouse: null };
@@ -136,12 +178,18 @@
   }
 
   function addFood(x, y, v, ci, keep, z) {
-    foods.push({ x: x, y: y, v: v, r: 3 + v * 1.4, ci: ci == null ? (Math.random() * PAL.length) | 0 : ci, keep: !!keep, z: z == null ? zoneAt(x, y) : z });
+    var nf = { x: x, y: y, v: v, r: 3 + v * 1.4, ci: ci == null ? (Math.random() * PAL.length) | 0 : ci, keep: !!keep, z: z == null ? zoneAt(x, y) : z };
+    foods.push(nf); return nf;
   }
   function baseFoodV(z) { return 1 + Math.random() * 1.5; }       // same value in every zone
 
   function dropDeathFood(s) {
-    for (var i = 0; i < s.segs.length; i += 3) addFood(s.segs[i].x + rnd(-10, 10), s.segs[i].y + rnd(-10, 10), 2 + s.mass / 90, s.ci, false);
+    var added = [];
+    for (var i = 0; i < s.segs.length; i += 3) {
+      var nf = addFood(s.segs[i].x + rnd(-10, 10), s.segs[i].y + rnd(-10, 10), 2 + s.mass / 90, s.ci, false);
+      if (NET && s.isPlayer) { nf.id = 'd' + NET.you + '_' + (dseq++); added.push([Math.round(nf.x), Math.round(nf.y), +nf.v.toFixed(2), nf.ci, nf.id]); }
+    }
+    if (added.length) VR.net.send({ t: 'drop', f: added });
     var extra = foods.length - 14000;
     for (var j = 0; j < foods.length && extra > 0; j++) if (!foods[j].keep) { foods.splice(j, 1); j--; extra--; }
   }
@@ -156,7 +204,7 @@
       by.kills++;
       if (by.isPlayer) { kills++; $('hudKills').textContent = kills; if (anim && anim.t === 'burst') burst(s.segs[0].x, s.segs[0].y, anim.c, 22); }
     }
-    if (s.isPlayer) onPlayerDown(by);
+    if (s.isPlayer) { if (NET) VR.net.send({ t: 'died', by: by && by.netId ? by.netId : null }); onPlayerDown(by); }
   }
 
   /* ---------- revive + spectate ---------- */
@@ -165,7 +213,7 @@
     heal.casting = false;
     if (matchT < (G.autoReviveSeconds || 180) && !rv.auto) { rv.auto = true; revive('AUTO REVIVE!'); return; }
     var mates = aliveMates().length > 0;
-    deadPlace = aliveCount() + 1;
+    deadPlace = aliveCount() + 1; diedT = matchT;
     if (!rv.heart && mates) {
       var h = player.segs[0];
       if (!outsideSafe(h.x, h.y, safeRect(matchT), 0)) { hearts = [{ x: h.x, y: h.y, t: 25 }]; banner('HEART DROPPED - a teammate can revive you!', 3000); }
@@ -236,7 +284,9 @@
       if (d2 < m * m) {
         if (d2 < (hr + f.r) * (hr + f.r)) {
           s.mass += f.v * 0.5; if (s.isPlayer) orbs++;
-          if (f.keep) { var p = randInZone(f.z); f.x = p.x; f.y = p.y; f.v = baseFoodV(f.z); f.r = 3 + f.v * 1.4; f.ci = (Math.random() * PAL.length) | 0; }
+          if (NET && s.isPlayer && f.id != null) eatQ.push(f.id);
+          if (f.keep && NET) respawnStatic(f);
+          else if (f.keep) { var p = randInZone(f.z); f.x = p.x; f.y = p.y; f.v = baseFoodV(f.z); f.r = 3 + f.v * 1.4; f.ci = (Math.random() * PAL.length) | 0; }
           else { foods[i] = foods[foods.length - 1]; foods.pop(); }
         } else { var pull = mag ? .3 : .18; f.x += dx * pull; f.y += dy * pull; }
       }
@@ -277,7 +327,7 @@
 
   function collisions() {
     for (var a = 0; a < snakes.length; a++) {
-      var A = snakes[a]; if (A.dead) continue;
+      var A = snakes[a]; if (A.dead || A.remote) continue;
       var h = A.segs[0], hit = null;
       for (var b = 0; b < snakes.length && !hit; b++) {
         var B = snakes[b]; if (B === A || B.dead) continue;
@@ -433,16 +483,20 @@
     lastPlace = '';
     if (VR.settings) VR.settings.apply();
     $('emoPanel').classList.remove('on');
-    G = VR_CONFIG.game; WORLD = G.worldSize; GOLD_R = WORLD * .11; HPMAX = G.hpMax || 100;
+    NET = cfg.net || null; byNet = {}; staticFoods = []; eatQ = []; dseq = 0; netT = 0;
+    G = VR_CONFIG.game;
+    if (NET) { G = {}; for (var gk in VR_CONFIG.game) G[gk] = VR_CONFIG.game[gk]; G.worldSize = NET.world; G.zoneMinSize = Math.min(G.zoneMinSize, NET.world * .15); }
+    WORLD = G.worldSize; GOLD_R = WORLD * .11; HPMAX = G.hpMax || 100;
     snakes = []; foods = []; rocks = []; pickups = []; meds = []; mcoins = []; hearts = []; parts = []; portal = null; golden = null; nextGold = 25;
     kills = 0; orbs = 0; myCoins = 0; over = false; paused = false; uid = 0; matchT = 0; tAcc = 0; flags = {}; mapOpen = false; winT = 0; winFx = 0;
-    rv = { auto: false, heart: false }; heal = { casting: false, t: 0, size: 's', cd: 0 }; deadPlace = 0; killerName = ''; lastHp = -1;
+    rv = { auto: false, heart: false }; heal = { casting: false, t: 0, size: 's', cd: 0 }; deadPlace = 0; diedT = 0; killerName = ''; lastHp = -1;
     spec = { on: false, idx: 0, liked: {}, reported: false };
     var u = cfg.user || {}, eq = u.eq || {};
     anim = eq.anim ? VR.cos.find('anim', eq.anim) : null;
     $('hudKills').textContent = '0';
     ['result', 'pauseBox', 'bigMap', 'spec', 'repMenu', 'banner'].forEach(function (id) { $(id).classList.remove('on'); });
     resize();
+    var realRandom = Math.random; if (NET) Math.random = prng(NET.seed);       // same world for every online player
     zc = { x: rnd(WORLD * .32, WORLD * .68), y: rnd(WORLD * .32, WORLD * .68) };
     Z.forEach(function (zn, zi) {
       var n = Math.round(zn.count * FOOD_K);
@@ -463,19 +517,32 @@
       for (var i = 0; i < zz[1]; i++) { var cp = randInZone(zz[0]); mcoins.push({ x: cp.x, y: cp.y, v: zz[2], z: zz[0] }); }
     });
 
+    Math.random = realRandom;
+    if (NET) { for (var fi = 0; fi < foods.length; fi++) { foods[fi].id = fi; foods[fi].rc = 0; } staticFoods = foods.slice(); nextGold = 1e9; }
     var me = u.name || 'You';
     var sp = randInZone(1 + ((Math.random() * 4) | 0)); sp.x = clamp(sp.x, 600, WORLD - 600); sp.y = clamp(sp.y, 600, WORLD - 600);
+    var myNet = NET ? NET.players.filter(function (q) { return q.id === NET.you; })[0] : null; if (myNet) { sp.x = myNet.x; sp.y = myNet.y; }
     player = makeSnake({ name: me, ci: u.skin || 0, team: 1, isPlayer: true, x: sp.x, y: sp.y, skin: VR.cos.find('skin', eq.skin || 's0'), ch: VR.cos.find('char', eq.char || 'c0') });
     snakes.push(player);
     if (anim && anim.t === 'spawn') portal = { x: sp.x, y: sp.y, t: 1.6 };
 
-    var mates = cfg.mode === 'squad' ? cfg.squad.filter(function (m) { return !m.you; }) : [];
+    var mates = cfg.mode === 'squad' && !NET ? cfg.squad.filter(function (m) { return !m.you; }) : [];
     mates.forEach(function (m, idx) {
       snakes.push(makeSnake({ name: m.name, ci: m.color != null ? m.color % PAL.length : (idx + 1) % PAL.length, team: 1, mate: true, x: sp.x - 120 - idx * 60, y: sp.y + 90 + idx * 40 }));
     });
     var used = {}; snakes.forEach(function (s) { used[s.name] = 1; });
     var pool = NAMES.filter(function (n) { return !used[n]; });
-    var nBots = Math.max(0, (G.maxPlayers || 50) - 1 - mates.length);
+    if (NET) {
+      NET.players.forEach(function (q) {
+        if (q.id === NET.you) return;
+        var same = !!(myNet && myNet.code && q.code === myNet.code);
+        var rs = makeSnake({ name: q.name, ci: q.ci || 0, team: same ? 1 : 0, mate: same, x: q.x, y: q.y, skin: VR.cos.find('skin', q.skin), ch: VR.cos.find('char', q.ch) });
+        rs.remote = true; rs.netId = q.id; byNet[q.id] = rs; snakes.push(rs);
+      });
+      VR.net.onGame = onNet;
+      hadEnemy = snakes.some(function (x) { return x.remote && !x.mate; });
+    }
+    var nBots = NET ? 0 : Math.max(0, (G.maxPlayers || 50) - 1 - mates.length);
     for (var b = 0; b < nBots; b++) {
       var p2 = freeSpot(900);
       snakes.push(makeSnake({ name: pool[b % pool.length] + (b >= pool.length ? b : ''), ci: (b + 2) % PAL.length, x: p2.x, y: p2.y, mass: rnd(10, 60) }));
@@ -488,11 +555,11 @@
     cancelAnimationFrame(raf); raf = requestAnimationFrame(frame);
   }
 
-  function stop() { running = false; cancelAnimationFrame(raf); }
+  function stop() { running = false; cancelAnimationFrame(raf); if (NET) { VR.net.onGame = null; VR.net.close(); } }
 
   function endGame(kind) {
     if (over) return;
-    over = true; leaveSpec();
+    over = true; leaveSpec(); if (NET) { VR.net.onGame = null; VR.net.close(); }
     var alive = snakes.filter(function (s) { return !s.dead; });
     var place;
     if (kind === 'win') place = 1;
@@ -501,7 +568,7 @@
     var win = kind === 'win' || (kind === 'time' && place === 1);
     var squadWin = win && cfg.mode === 'squad' && alive.some(function (s) { return s.mate; });
     var score = Math.floor(player.mass * 10);
-    var res = (VR.lobby && VR.lobby.recordGame) ? VR.lobby.recordGame({ kills: kills, score: score, rank: place, win: win, orbs: orbs, squad: cfg.mode === 'squad', mode: cfg.mode }) : null;
+    var res = (VR.lobby && VR.lobby.recordGame) ? VR.lobby.recordGame({ time: player.dead ? diedT : matchT, kills: kills, score: score, rank: place, win: win, orbs: orbs, squad: cfg.mode === 'squad', mode: cfg.mode }) : null;
     $('resTitle').textContent = win ? (squadWin ? 'SQUAD KINGS!' : 'VIPER KING!') : (kind === 'time' ? 'TIME UP' : 'YOU DIED');
     $('resCard').classList.toggle('win', win);
     $('resScore').textContent = score;
@@ -826,13 +893,14 @@
       for (var i = 0; i < snakes.length; i++) {
         var s = snakes[i];
         if (s.dead) continue;
+        if (s.remote) { stepRemote(s, dt); continue; }
         if (!s.isPlayer) think(s, dt);
         if (s.emo) { s.emo.t -= dt; if (s.emo.t <= 0) s.emo = null; }
         else if (!s.isPlayer && Math.random() < dt * .004 && VR.store) { var EL = VR.store.EMOTES; s.emo = { e: EL[2 + Math.floor(Math.random() * (EL.length - 2))].e, t: 2.4 }; }
         stepSnake(s, dt); if (s.dead) continue; eat(s);
       }
       collisions();
-      stepFx(dt);
+      stepFx(dt); netTick(dt);
       for (var q = 0; q < pickups.length; q++) {
         var pu = pickups[q]; if (pu.cd > 0) { pu.cd -= dt; if (pu.cd <= 0) { var np = freeSpot(0); pu.x = np.x; pu.y = np.y; } }
       }
@@ -846,7 +914,7 @@
         winT -= dt;
         if (winT <= 0) {
           winT = .4;
-          if (!snakes.some(function (x) { return !x.dead && x.team !== 1; })) endGame('win');
+          if ((!NET || hadEnemy) && !snakes.some(function (x) { return !x.dead && x.team !== 1; })) endGame('win');
           else if (player.dead && !aliveMates().length) endGame('dead');
         }
         if (matchT >= G.matchSeconds) endGame('time');
@@ -900,7 +968,7 @@
     });
     ep.addEventListener('click', function (e) {
       var b = e.target.closest('button'); if (!b || !player || player.dead) return;
-      var it = VR.store.find('emote', b.dataset.e); if (it) player.emo = { e: it.e, t: 3 };
+      var it = VR.store.find('emote', b.dataset.e); if (it) { player.emo = { e: it.e, t: 3 }; if (NET) VR.net.send({ t: 'emo', e: it.e }); }
       ep.classList.remove('on');
     });
     $('healS').addEventListener('click', function () { startHeal('s'); });
@@ -965,5 +1033,5 @@
   window.VR = window.VR || {};
   VR.game = { init: init, start: start, stop: stop, resize: resize,
     // testing helper (used by automatic tests, harmless in the real game)
-    debug: function () { return { snakes: snakes, player: player, hearts: hearts, rv: rv, heal: heal, spec: spec, setCoins: function (n) { myCoins = n; }, kill: kill, setTime: function (t) { matchT = t; }, medkits: meds, coins: mcoins }; } };
+    debug: function () { return { foods: foods, snakes: snakes, player: player, hearts: hearts, rv: rv, heal: heal, spec: spec, setCoins: function (n) { myCoins = n; }, kill: kill, setTime: function (t) { matchT = t; }, medkits: meds, coins: mcoins }; } };
 })();
