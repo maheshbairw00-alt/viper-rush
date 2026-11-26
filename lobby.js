@@ -356,7 +356,7 @@
       { label: 'CANCEL', onClick: function () { cancelled = true; VR.net.close(); } }
     ] });
     function go(msg, text) { if (cancelled) return; VR.ui.closeModal(); if (text) VR.ui.toast(text); if (msg) cfg0.net = msg; VR.app.startGame(cfg0); }
-    VR.net.find({ name: user.name, skin: user.eq.skin, ch: user.eq.char, ci: user.skin || 0, code: mode === 'squad' ? code : '' }, {
+    VR.net.find({ name: user.name, skin: user.eq.skin, ch: user.eq.char, ci: user.skin || 0, code: mode === 'squad' ? code : '', uid: user.provider !== 'guest' ? user.id : '' }, {
       wait: function (n, max, left) { var t = $('mmTxt'); if (t) t.textContent = 'Players found: ' + n + ' / ' + max + '  -  match starts in ' + left + 's'; },
       start: function (msg) { go(msg); },
       solo: function () { go(null, 'No other players found - playing with bots'); },

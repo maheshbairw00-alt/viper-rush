@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Viper Rush Admin</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font:15px/1.4 system-ui,sans-serif;background:#0E0A24;color:#EDE9FF;padding:12px 12px 60px}
+h1{font-size:20px;margin:6px 0 10px;letter-spacing:.06em;color:#B6FF3B}
+button{font:inherit;border:0;border-radius:10px;padding:10px 14px;background:#FFB11F;color:#3A1A00;font-weight:700}
+button.g{background:#2A2058;color:#EDE9FF}button.r{background:#FF3B5C;color:#fff}button.ok{background:#16A34A;color:#fff}
+button:disabled{opacity:.5}
+input,select{font:inherit;width:100%;padding:10px;border-radius:10px;border:1px solid #4B3C99;background:#1A1340;color:#fff}
+.card{background:#1A1340;border-radius:14px;padding:12px;margin:10px 0;border:1px solid #3A2C80}
+.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}.row>button{flex:none}
+.tabs{display:flex;gap:8px;margin:8px 0}.tabs button{flex:1;background:#2A2058;color:#EDE9FF}.tabs button.on{background:#FFB11F;color:#3A1A00}
+.p{display:flex;justify-content:space-between;gap:8px;padding:10px;border-radius:10px;background:#231A55;margin:6px 0}
+.p small{color:#A99BE0;display:block}.tag{background:#FF3B5C;border-radius:99px;padding:1px 8px;font-size:12px;margin-left:6px}
+.hide{display:none}.msg{color:#FFE45C;margin:8px 0;white-space:pre-wrap}
+pre{white-space:pre-wrap;background:#0B0720;border-radius:10px;padding:10px;font-size:12px;overflow:auto}
+</style>
+</head>
+<body>
+<h1>VIPER RUSH ADMIN</h1>
+<div id="login" class="card"><p>Sign in with your admin Google account.</p><button id="go">Sign in with Google</button><div class="msg" id="lmsg"></div></div>
+
+<div id="app" class="hide">
+  <div class="row"><div id="who" style="font-size:13px;color:#A99BE0"></div><button class="g" id="out">Sign out</button></div>
+  <div class="msg" id="denied"></div>
+  <div class="tabs"><button id="tp" class="on">PLAYERS</button><button id="tr">REPORTS</button></div>
+
+  <div id="vp">
+    <input id="q" placeholder="Search name or player ID" autocomplete="off">
+    <div class="msg" id="pinfo"></div>
+    <div id="plist"></div>
+    <div id="pdet" class="card hide"></div>
+  </div>
+  <div id="vr" class="hide">
+    <div class="row"><button class="g" id="rrefresh">Refresh</button><select id="rfilter"><option value="new">New</option><option value="all">All</option></select></div>
+    <div id="rlist"></div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="config.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var fb = firebase; fb.initializeApp(VR_CONFIG.firebase);
+  var db = fb.firestore(), A = fb.firestore.FieldValue;
+  var USERS = VR_CONFIG.cloudCollection || 'viperrush_users', players = [], me = null;
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  /* same level table as the game */
+  var STEPS = [200, 500, 1000, 2000, 3000, 4000, 5000, 6000, 10000, 20000, 25000, 100000, 200000, 300000];
+  function need(L) { var t = Math.floor((L - 1) / 5); return t < STEPS.length ? STEPS[t] : STEPS[STEPS.length - 1] * Math.pow(2, t - STEPS.length + 1); }
+  function levelOf(xp) { var L = 1, l = Math.max(0, xp || 0); while (l >= need(L) && L < 100000) { l -= need(L); L++; } return L; }
+
+  $('go').onclick = function () {
+    $('lmsg').textContent = '';
+    fb.auth().signInWithPopup(new fb.auth.GoogleAuthProvider()).catch(function (e) { $('lmsg').textContent = 'Login failed: ' + (e.code || e.message); });
+  };
+  $('out').onclick = function () { fb.auth().signOut(); };
+  fb.auth().onAuthStateChanged(function (u) {
+    me = u; $('login').classList.toggle('hide', !!u); $('app').classList.toggle('hide', !u);
+    if (!u) return;
+    $('who').textContent = 'Signed in: ' + u.email;
+    loadPlayers();
+  });
+
+  function denied(e) {
+    $('denied').textContent = 'No access (' + (e.code || e.message) + ').\nTo allow this admin, put this email in the Firestore rules: ' + (me && me.email);
+  }
+
+  function tab(t) {
+    $('tp').classList.toggle('on', t === 'p'); $('tr').classList.toggle('on', t === 'r');
+    $('vp').classList.toggle('hide', t !== 'p'); $('vr').classList.toggle('hide', t !== 'r');
+    if (t === 'r') loadReports();
+  }
+  $('tp').onclick = function () { tab('p'); }; $('tr').onclick = function () { tab('r'); };
+
+  /* ---------- players ---------- */
+  function loadPlayers() {
+    $('pinfo').textContent = 'Loading players...';
+    db.collection(USERS).limit(500).get().then(function (snap) {
+      $('denied').textContent = '';
+      players = snap.docs.map(function (d) { var p = (d.data() || {}).profile || {}; p._id = d.id; return p; });
+      players.sort(function (a, b) { return String(a.name || '').localeCompare(String(b.name || '')); });
+      $('pinfo').textContent = players.length + ' players';
+      drawList();
+    }).catch(function (e) { $('pinfo').textContent = ''; denied(e); });
+  }
+  function drawList() {
+    var q = $('q').value.trim().toLowerCase(), h = '';
+    players.filter(function (p) { return !q || String(p.name || '').toLowerCase().indexOf(q) >= 0 || p._id.toLowerCase().indexOf(q) >= 0 || String(p.email || '').toLowerCase().indexOf(q) >= 0; }).slice(0, 80).forEach(function (p) {
+      h += '<div class="p" data-id="' + esc(p._id) + '"><div><b>' + esc(p.name) + '</b><small>' + esc(p.provider) + ' &middot; ' + esc(p.email || '') + '</small></div><div style="text-align:right">LV ' + levelOf(p.xp) + '<small>' + (p.gems || 0) + ' gems &middot; ' + (p.coins || 0) + ' coins</small></div></div>';
+    });
+    $('plist').innerHTML = h || '<p class="msg">No players found</p>';
+  }
+  $('q').oninput = drawList;
+  $('plist').onclick = function (e) { var r = e.target.closest('.p'); if (r) openPlayer(r.dataset.id); };
+
+  function openPlayer(id) {
+    var p = players.filter(function (x) { return x._id === id; })[0]; if (!p) return;
+    Promise.all([db.collection('viperrush_admin').doc(id).get()]).then(function (r) {
+      var a = r[0].exists ? r[0].data() : {}, st = p.stats || {};
+      var d = $('pdet'); d.classList.remove('hide');
+      d.innerHTML = '<div class="row"><b style="font-size:17px">' + esc(p.name) + (a.banned ? '<span class="tag">BANNED</span>' : '') + '</b><button class="g" id="dclose" style="flex:none">Close</button></div>' +
+        '<small style="color:#A99BE0">ID: ' + esc(id) + '<br>' + esc(p.provider) + ' ' + esc(p.email || '') + '</small>' +
+        '<p>Level ' + levelOf(p.xp) + ' &middot; XP ' + (p.xp || 0) + '<br>Diamonds ' + (p.gems || 0) + ' &middot; Coins ' + (p.coins || 0) +
+        '<br>Matches ' + (st.matches || 0) + ' &middot; Wins ' + (st.wins || 0) + ' &middot; Kills ' + (st.kills || 0) + '</p>' +
+        '<p class="msg" style="margin:0 0 8px">Gifts and bans reach the player the next time they open the game.</p>' +
+        gift('gems', 'Diamonds') + gift('coins', 'Coins') + gift('xp', 'XP') +
+        '<div class="card"><b>' + (a.banned ? 'Unban' : 'Ban') + '</b><input id="breason" placeholder="Reason (shown to the player)" value="' + esc(a.banReason || '') + '" style="margin:8px 0">' +
+        '<button class="' + (a.banned ? 'ok' : 'r') + '" id="bban" style="width:100%">' + (a.banned ? 'UNBAN PLAYER' : 'BAN PLAYER') + '</button></div><div class="msg" id="dmsg"></div>';
+      d.scrollIntoView({ behavior: 'smooth' });
+      $('dclose').onclick = function () { d.classList.add('hide'); };
+      ['gems', 'coins', 'xp'].forEach(function (k) {
+        $('give_' + k).onclick = function () { sendGift(id, k, 1); }; $('take_' + k).onclick = function () { sendGift(id, k, -1); };
+      });
+      $('bban').onclick = function () { setBan(id, !a.banned, $('breason').value.trim()); };
+    }).catch(denied);
+  }
+  function gift(k, label) {
+    return '<div class="card"><b>' + label + '</b><div class="row" style="margin-top:8px"><input id="amt_' + k + '" type="number" min="1" placeholder="amount"><button class="ok" id="give_' + k + '">GIVE</button><button class="r" id="take_' + k + '">TAKE</button></div></div>';
+  }
+  function sendGift(id, k, sign) {
+    var n = Math.floor(+$('amt_' + k).value);
+    if (!(n > 0)) { $('dmsg').textContent = 'Enter an amount first'; return; }
+    var g = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ts: Date.now(), by: me.email }; g[k] = n * sign;
+    db.collection('viperrush_admin').doc(id).set({ grants: A.arrayUnion(g) }, { merge: true }).then(function () {
+      $('dmsg').textContent = (sign > 0 ? 'Gave ' : 'Took ') + n + ' ' + k + '. It reaches the player when they next open the game.'; $('amt_' + k).value = '';
+    }).catch(function (e) { $('dmsg').textContent = 'Failed: ' + (e.code || e.message); });
+  }
+  function setBan(id, on, reason) {
+    db.collection('viperrush_admin').doc(id).set({ banned: on, banReason: on ? reason : '', bannedBy: me.email, bannedAt: Date.now() }, { merge: true }).then(function () {
+      $('dmsg').textContent = on ? 'Player banned.' : 'Player unbanned.'; setTimeout(function () { openPlayer(id); }, 600);
+    }).catch(function (e) { $('dmsg').textContent = 'Failed: ' + (e.code || e.message); });
+  }
+
+  /* ---------- reports ---------- */
+  function loadReports() {
+    $('rlist').innerHTML = '<p class="msg">Loading...</p>';
+    db.collection('viperrush_reports').orderBy('ts', 'desc').limit(100).get().then(function (snap) {
+      var f = $('rfilter').value, h = '';
+      snap.docs.forEach(function (d) {
+        var r = d.data(); if (f === 'new' && r.status !== 'new') return;
+        h += '<div class="card"><b>' + esc(r.target) + '</b> <span class="tag" style="background:#6D4AFF">' + esc(r.reason) + '</span>' +
+          '<small style="display:block;color:#A99BE0">by ' + esc(r.byName) + ' &middot; ' + new Date(r.ts).toLocaleString() + ' &middot; ' + (r.online ? 'online match' : 'offline match') + ' &middot; ' + esc(r.status) + '</small>' +
+          '<div class="row" style="margin-top:8px">' + (r.targetUid ? '<button class="r" data-a="ban" data-uid="' + esc(r.targetUid) + '" data-rid="' + d.id + '" data-why="' + esc(r.reason) + '">BAN</button>' : '<button class="g" disabled>No account</button>') +
+          '<button class="g" data-a="done" data-rid="' + d.id + '">DISMISS</button></div></div>';
+      });
+      $('rlist').innerHTML = h || '<p class="msg">No reports</p>';
+    }).catch(function (e) { $('rlist').innerHTML = ''; denied(e); });
+  }
+  $('rrefresh').onclick = loadReports; $('rfilter').onchange = loadReports;
+  $('rlist').onclick = function (e) {
+    var b = e.target.closest('button'); if (!b || !b.dataset.a) return;
+    var rid = b.dataset.rid;
+    if (b.dataset.a === 'done') db.collection('viperrush_reports').doc(rid).update({ status: 'done' }).then(loadReports);
+    else if (confirm('Ban this player?')) {
+      db.collection('viperrush_admin').doc(b.dataset.uid).set({ banned: true, banReason: b.dataset.why, bannedBy: me.email, bannedAt: Date.now() }, { merge: true })
+        .then(function () { return db.collection('viperrush_reports').doc(rid).update({ status: 'banned' }); }).then(loadReports)
+        .catch(function (er) { alert('Failed: ' + (er.code || er.message)); });
+    }
+  };
+})();
+</script>
+</body>
+</html>

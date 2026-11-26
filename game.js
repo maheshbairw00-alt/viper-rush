@@ -537,7 +537,7 @@
         if (q.id === NET.you) return;
         var same = !!(myNet && myNet.code && q.code === myNet.code);
         var rs = makeSnake({ name: q.name, ci: q.ci || 0, team: same ? 1 : 0, mate: same, x: q.x, y: q.y, skin: VR.cos.find('skin', q.skin), ch: VR.cos.find('char', q.ch) });
-        rs.remote = true; rs.netId = q.id; byNet[q.id] = rs; snakes.push(rs);
+        rs.remote = true; rs.netId = q.id; rs.uid = q.uid || ''; byNet[q.id] = rs; snakes.push(rs);
       });
       VR.net.onGame = onNet;
       hadEnemy = snakes.some(function (x) { return x.remote && !x.mate; });
@@ -1004,7 +1004,8 @@
     document.querySelectorAll('#repMenu [data-r]').forEach(function (b) {
       b.addEventListener('click', function () {
         var tg = specTarget(), who = (killerName && killerName !== 'RED WALL') ? killerName : (tg ? tg.name : 'player');
-        // NETWORK HOOK: send the report (who + reason + match id) to the server here
+        var rsn = snakes.filter(function (x) { return x.name === who; })[0];
+        if (VR.auth && VR.auth.report) VR.auth.report({ target: who, targetUid: (rsn && rsn.uid) || '', reason: b.dataset.r, mode: cfg.mode, online: !!NET });
         spec.reported = true; $('repMenu').classList.remove('on');
         VR.ui.toast('Report sent for ' + who + ' (' + b.dataset.r + '). Thank you!');
       });

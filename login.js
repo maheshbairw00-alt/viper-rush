@@ -46,6 +46,28 @@
       col().doc(u.id).set({ profile: data }, { merge: true }).catch(warn);
     }, 1500);
   }
+  function col2(name) { return fb().firestore().collection(name); }
+  // Admin panel: gifts (diamonds / coins / XP) and bans are written to viperrush_admin/<player id>. The game applies them here.
+  function applyGrants(user, d) {
+    if (!d || !d.grants || !d.grants.length) return false;
+    var done = user.grantsDone = user.grantsDone || [], changed = false;
+    d.grants.forEach(function (g) {
+      if (done.indexOf(g.id) >= 0) return;
+      user.gems = Math.max(0, (user.gems || 0) + (g.gems || 0));
+      user.coins = Math.max(0, (user.coins || 0) + (g.coins || 0));
+      user.xp = Math.max(0, (user.xp || 0) + (g.xp || 0));
+      done.push(g.id); changed = true;
+    });
+    if (done.length > 200) user.grantsDone = done.slice(-200);
+    return changed;
+  }
+  function adminCheck(user) {                                // resolves true if something changed, rejects with vr/banned
+    return col2('viperrush_admin').doc(user.id).get().then(function (a) {
+      var d = a.exists ? a.data() : null;
+      if (d && d.banned) { var e = new Error('banned'); e.code = 'vr/banned'; e.reason = d.banReason || ''; throw e; }
+      return applyGrants(user, d);
+    }).catch(function (e) { if (e && e.code === 'vr/banned') throw e; warn(e); return false; });
+  }
   function cloudGet(uid) { return col().doc(uid).get().then(function (d) { return d.exists ? d.data() : null; }); }
 
   function mergeProfile(user, prof) {
@@ -64,7 +86,10 @@
         user.provider = provider; user.photo = u.photoURL || user.photo || null;
         user.email = u.email || user.email || '';
         return user;
-      }).catch(function (e) { warn(e); user.email = u.email || ''; return user; });  // cloud problem: play with a local save
+      }).catch(function (e) { warn(e); user.email = u.email || ''; return user; })  // cloud problem: play with a local save
+        .then(function (usr) {
+          return adminCheck(usr).then(function () { return usr; }, function (e) { try { f.auth().signOut(); } catch (x) {} throw e; });
+        });
     });
   }
 
@@ -98,19 +123,32 @@
         col().doc(u.id).set({ social: JSON.parse(JSON.stringify(obj)) }, { merge: true }).catch(warn);
       }, 1500);
     },
+    // a player sends a report (shown in the admin panel)
+    report: function (o) {
+      var u = auth.user; if (!isReal(u)) return;
+      o.byId = u.id; o.byName = u.name; o.ts = Date.now(); o.status = 'new';
+      col2('viperrush_reports').add(o).catch(warn);
+    },
     // after reopening the app: take the newer copy (phone or cloud)
     pull: function () {
       var u = auth.user; if (!isReal(u)) return Promise.resolve(false);
       var ready = new Promise(function (res) { var off = fb().auth().onAuthStateChanged(function (x) { off(); res(x); }); });
       return ready.then(function (cu) { return cu && cu.uid === u.id ? cloudGet(u.id) : null; }).then(function (doc) {
-        if (doc && doc.profile && (doc.profile.updatedAt || 0) > (u.updatedAt || 0)) {
-          mergeProfile(u, doc.profile);
-          try { localStorage.setItem(KEY, JSON.stringify(u)); } catch (e) {}
-          if (VR.lobby && VR.lobby.refresh) VR.lobby.refresh();
-          return true;
-        }
-        return false;
-      }).catch(function (e) { warn(e); return false; });
+        var merged = false;
+        if (doc && doc.profile && (doc.profile.updatedAt || 0) > (u.updatedAt || 0)) { mergeProfile(u, doc.profile); merged = true; }
+        return adminCheck(u).then(function (gift) {
+          if (merged || gift) {
+            if (gift) auth.save(); else { try { localStorage.setItem(KEY, JSON.stringify(u)); } catch (e) {} }
+            if (VR.lobby && VR.lobby.refresh) VR.lobby.refresh();
+            if (gift && VR.ui) VR.ui.toast('You received a gift from the Viper Rush team!');
+            return true;
+          }
+          return false;
+        });
+      }).catch(function (e) {
+        if (e && e.code === 'vr/banned') { auth.logout(); if (VR.app) VR.app.go('login'); if (VR.ui) VR.ui.toast('This account is banned' + (e.reason ? ': ' + e.reason : '')); return false; }
+        warn(e); return false;
+      });
     },
     login: function (provider) {
       var useReal = provider !== 'guest' && fbOn();
@@ -152,6 +190,7 @@
           var msg = code === 'auth/unauthorized-domain' ? 'This website is not allowed yet in Firebase (add it to Authorized domains)'
             : code === 'auth/operation-not-allowed' ? 'This login is not turned on in Firebase yet'
             : code === 'auth/popup-closed-by-user' ? 'Login cancelled'
+            : code === 'vr/banned' ? 'This account is banned' + (err.reason ? ': ' + err.reason : '')
             : code === 'auth/popup-blocked' ? 'Allow pop-ups for this site and try again'
             : 'Login failed. Please try again.';
           VR.ui.toast(msg);

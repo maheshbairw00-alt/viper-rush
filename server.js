@@ -110,7 +110,7 @@ function startRoom(r) {
     const key = p.code || p.id;
     if (!spots[key]) spots[key] = { x: pad + Math.random() * (world - 2 * pad), y: pad + Math.random() * (world - 2 * pad) };
     const s = spots[key];
-    return { id: p.id, name: p.name, skin: p.skin, ch: p.ch, ci: p.ci, code: p.code, x: Math.round(s.x + (Math.random() - .5) * 200), y: Math.round(s.y + (Math.random() - .5) * 200) };
+    return { id: p.id, name: p.name, skin: p.skin, ch: p.ch, ci: p.ci, code: p.code, uid: p.uid, x: Math.round(s.x + (Math.random() - .5) * 200), y: Math.round(s.y + (Math.random() - .5) * 200) };
   });
   r.started = true;
   for (const p of list) p.conn.send(JSON.stringify({ t: 'start', seed, world, you: p.id, players }));
@@ -124,7 +124,7 @@ function onConnect(conn) {
     let m; try { m = JSON.parse(text); } catch (e) { return; }
     if (m.t === 'join' && !me.room) {
       me.name = String(m.name || 'Player').slice(0, 14); me.skin = String(m.skin || 's0').slice(0, 8); me.ch = String(m.ch || 'c0').slice(0, 8);
-      me.ci = (m.ci | 0) % 6; me.code = String(m.code || '').toUpperCase().slice(0, 5);
+      me.uid = String(m.uid || '').slice(0, 40); me.ci = (m.ci | 0) % 6; me.code = String(m.code || '').toUpperCase().slice(0, 5);
       me.room = findRoom(me.code); me.room.players.set(me.id, me);
       conn.send(JSON.stringify({ t: 'joined', id: me.id }));
       roomTick(me.room); return;

@@ -25,7 +25,7 @@
     // a sleeping free server can need up to a minute to wake up
     failTimer = setTimeout(function () { if (!matched) fail(); }, 70000);
     ws.onopen = function () {
-      send({ t: 'join', name: opts.name, skin: opts.skin, ch: opts.ch, ci: opts.ci, code: opts.code });
+      send({ t: 'join', name: opts.name, skin: opts.skin, ch: opts.ch, ci: opts.ci, code: opts.code, uid: opts.uid });
       ping = setInterval(function () { send({ t: 'ping' }); }, 20000);
     };
     ws.onmessage = function (e) {

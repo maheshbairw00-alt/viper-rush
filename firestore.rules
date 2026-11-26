@@ -1,0 +1,30 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // CHANGE THIS to your admin Google email (the one you sign in with on admin.html)
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['YOUR_ADMIN_EMAIL@gmail.com'];
+    }
+
+    // each player: only their own data (same as before)
+    match /viperrush_users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if isAdmin();
+    }
+
+    // gifts and bans written by the admin; the player can only read their own
+    match /viperrush_admin/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if isAdmin();
+    }
+
+    // reports: any logged in player can send one, only the admin can read them
+    match /viperrush_reports/{reportId} {
+      allow create: if request.auth != null && request.resource.data.byId == request.auth.uid;
+      allow read, update: if isAdmin();
+    }
+  }
+}
