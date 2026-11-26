@@ -177,7 +177,7 @@
   /* ---------- movement ---------- */
   function stepSnake(s, dt) {
     var h = s.segs[0], rr = s.r, z = zoneAt(h.x, h.y);
-    var diff = angDiff(s.targetAngle, s.angle), maxT = 4.4 * dt * (s.boost ? .8 : 1) * (z === 3 ? .42 : 1);
+    var diff = angDiff(s.targetAngle, s.angle), maxT = 4.4 * (s === player && VR.settings ? VR.settings.get('sens') / 100 : 1) * dt * (s.boost ? .8 : 1) * (z === 3 ? .42 : 1);
     s.angle += clamp(diff, -maxT, maxT);
     var sp = s.boost ? G.boostSpeed : G.speed;
     if (s.fx.sp > 0) sp = Math.max(sp, G.boostSpeed * .92);
@@ -412,6 +412,8 @@
 
   function start(c) {
     cfg = c || { mode: 'solo', squad: [] };
+    if (VR.settings) VR.settings.apply();
+    $('emoPanel').classList.remove('on');
     G = VR_CONFIG.game; WORLD = G.worldSize; GOLD_R = WORLD * .11; HPMAX = G.hpMax || 100;
     snakes = []; foods = []; rocks = []; pickups = []; meds = []; mcoins = []; hearts = []; parts = []; portal = null; golden = null; nextGold = 25;
     kills = 0; orbs = 0; myCoins = 0; over = false; paused = false; uid = 0; matchT = 0; tAcc = 0; flags = {}; mapOpen = false; winT = 0; winFx = 0;
@@ -672,6 +674,14 @@
     ctx.font = '700 ' + Math.max(11, r * 1.1) + 'px Rajdhani, sans-serif'; ctx.textAlign = 'center';
     ctx.fillStyle = s.isPlayer ? '#B6FF3B' : (s.mate ? '#22D3EE' : 'rgba(255,255,255,.85)');
     ctx.fillText(s.name, h.x, h.y - hr * 1.9 - (winFx > 0 && s.isPlayer ? 30 : 0));
+    if (s.emo && s.emo.t > 0) {                           // emote bubble
+      var ey = h.y - hr * 1.9 - 52 - (winFx > 0 && s.isPlayer ? 30 : 0), ea = Math.min(1, s.emo.t * 3), pop = 1 + .15 * Math.sin(s.emo.t * 8);
+      ctx.save(); ctx.globalAlpha = ea; ctx.translate(h.x, ey); ctx.scale(pop, pop);
+      ctx.fillStyle = 'rgba(255,255,255,.95)'; ctx.beginPath(); ctx.arc(0, 0, 24, 0, 6.283); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-6, 21); ctx.lineTo(0, 32); ctx.lineTo(6, 21); ctx.fill();
+      ctx.font = '30px sans-serif'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000'; ctx.fillText(s.emo.e, 0, 2); ctx.textBaseline = 'alphabetic';
+      ctx.restore();
+    }
     if (s.hp < HPMAX) {                                  // small HP bar over the head
       var bw = 38, bx = h.x - bw / 2, by = h.y - hr * 1.9 - 20;
       ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(bx, by, bw, 5);
@@ -780,6 +790,8 @@
         var s = snakes[i];
         if (s.dead) continue;
         if (!s.isPlayer) think(s, dt);
+        if (s.emo) { s.emo.t -= dt; if (s.emo.t <= 0) s.emo = null; }
+        else if (!s.isPlayer && Math.random() < dt * .004 && VR.store) { var EL = VR.store.EMOTES; s.emo = { e: EL[2 + Math.floor(Math.random() * (EL.length - 2))].e, t: 2.4 }; }
         stepSnake(s, dt); if (s.dead) continue; eat(s);
       }
       collisions();
@@ -817,7 +829,7 @@
 
   function resize() {
     if (!cv) return;
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    dpr = Math.min(window.devicePixelRatio || 1, { low: 1, mid: 1.5, high: 2 }[(VR.settings && VR.settings.get('quality')) || 'high']);
     W = window.innerWidth; H = window.innerHeight;
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
   }
@@ -842,6 +854,18 @@
     bb.addEventListener('pointerdown', function (e) { bb.setPointerCapture(e.pointerId); bset(true); e.preventDefault(); });
     bb.addEventListener('pointerup', function () { bset(false); }); bb.addEventListener('pointercancel', function () { bset(false); });
 
+    var eb = $('emoBtn'), ep = $('emoPanel');
+    eb.addEventListener('click', function () {
+      if (ep.classList.contains('on')) { ep.classList.remove('on'); return; }
+      var u = VR.lobby.openUser(), ids = (u && u.eq && u.eq.emotes) || ['em0', 'em1'];
+      ep.innerHTML = ids.map(function (id) { var it = VR.store.find('emote', id); return it ? '<button type="button" data-e="' + id + '">' + it.e + '</button>' : ''; }).join('');
+      ep.classList.add('on');
+    });
+    ep.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b || !player || player.dead) return;
+      var it = VR.store.find('emote', b.dataset.e); if (it) player.emo = { e: it.e, t: 3 };
+      ep.classList.remove('on');
+    });
     $('healS').addEventListener('click', function () { startHeal('s'); });
     $('healL').addEventListener('click', function () { startHeal('l'); });
 
@@ -902,7 +926,7 @@
   }
 
   window.VR = window.VR || {};
-  VR.game = { init: init, start: start, stop: stop,
+  VR.game = { init: init, start: start, stop: stop, resize: resize,
     // testing helper (used by automatic tests, harmless in the real game)
     debug: function () { return { snakes: snakes, player: player, hearts: hearts, rv: rv, heal: heal, spec: spec, setCoins: function (n) { myCoins = n; }, kill: kill, setTime: function (t) { matchT = t; }, medkits: meds, coins: mcoins }; } };
 })();

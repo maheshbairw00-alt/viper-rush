@@ -62,8 +62,9 @@
         if (doc && doc.profile) mergeProfile(user, doc.profile);          // welcome back: restore everything
         if (doc && doc.social) { try { localStorage.setItem('vr_social_' + u.uid, JSON.stringify(doc.social)); } catch (e) {} }
         user.provider = provider; user.photo = u.photoURL || user.photo || null;
+        user.email = u.email || user.email || '';
         return user;
-      }).catch(function (e) { warn(e); return user; });                      // cloud problem: play with a local save
+      }).catch(function (e) { warn(e); user.email = u.email || ''; return user; });  // cloud problem: play with a local save
     });
   }
 
@@ -117,9 +118,17 @@
       return p.then(function (user) { auth.user = user; auth.save(); return user; });
     },
     logout: function () {
+      var u = auth.user, flush = Promise.resolve();
+      if (isReal(u)) {                                   // send the latest progress to the cloud before leaving
+        clearTimeout(saveT); clearTimeout(socialT);
+        var data = JSON.parse(JSON.stringify(u)); delete data.id;
+        flush = col().doc(u.id).set({ profile: data }, { merge: true }).catch(warn);
+      }
       auth.user = null;
       try { localStorage.removeItem(KEY); } catch (e) {}
-      if (window.firebase && window.firebase.apps && window.firebase.apps.length) { try { window.firebase.auth().signOut(); } catch (e) {} }
+      return flush.then(function () {
+        if (window.firebase && window.firebase.apps && window.firebase.apps.length) { try { window.firebase.auth().signOut(); } catch (e) {} }
+      });
     }
   };
 

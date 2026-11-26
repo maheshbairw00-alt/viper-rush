@@ -64,7 +64,7 @@
     }
     social = d;
   }
-  function saveSocial() { try { localStorage.setItem('vr_social_' + user.id, JSON.stringify(social)); } catch (e) {} }
+  function saveSocial() { try { localStorage.setItem('vr_social_' + user.id, JSON.stringify(social)); } catch (e) {} if (VR.auth && VR.auth.user === user && VR.auth.saveSocial) VR.auth.saveSocial(social); }
   function isFriend(name) { return social.friends.some(function (f) { return f.name === name; }); }
 
   /* ---------- player stats, danger rating ---------- */
@@ -79,6 +79,7 @@
     user.inv = user.inv || { skins: { s0: true }, chars: { c0: true }, anims: {} };
     user.inv.skins = user.inv.skins || { s0: true }; user.inv.chars = user.inv.chars || { c0: true }; user.inv.anims = user.inv.anims || {};
     user.eq = user.eq || { skin: 's0', char: 'c0', anim: '' };
+    if (VR.store) VR.store.initUser(user);
     user.pass = !!user.pass;
     var gm = (location.search.match(/[?&]gems=(\d+)/) || [])[1]; if (gm) user.gems = +gm;     // testing: index.html?gems=5000
     user.rp = user.rp || { solo: 0, squad: 0 };
@@ -220,6 +221,7 @@
     $('meDp').textContent = (user.name || 'P').charAt(0).toUpperCase();
     $('meName').textContent = user.name;
     $('meLv').textContent = 'LV ' + user.level;
+    if (VR.store) VR.store.decorate(user);
     $('meXp').style.width = ((user.xp % 500) / 5) + '%';
     $('coins').textContent = fmt(user.coins);
     $('gems').textContent = fmt(user.gems);
@@ -667,16 +669,7 @@
     row.appendChild(b); row.appendChild(document.createTextNode(text));
     list.appendChild(row); list.scrollTop = list.scrollHeight;
   }
-  function openSettings() {
-    VR.ui.modal({
-      title: 'SETTINGS',
-      body: 'Signed in as ' + user.name + ' (' + user.provider + ')',
-      actions: [
-        { label: 'LOG OUT', primary: true, onClick: function () { closeSheet(); VR.auth.logout(); VR.app.go('login'); } },
-        { label: 'CLOSE' }
-      ]
-    });
-  }
+  function openSettings() { VR.settings.open(); }
 
   /* ---------- enter / init ---------- */
   function resetSquad() { squad = [{ name: user.name, you: true }]; for (var i = 1; i < SIZE; i++) squad.push(null); }
@@ -686,6 +679,7 @@
     resetSquad(); code = newCode(); mode = 'squad';
     $('chatList').innerHTML = ''; addChat('SYSTEM', 'Welcome to Viper Rush. Invite friends with your team code.');
     closeSheet();
+    if (VR.settings) VR.settings.apply();
     renderProfile(); renderSlots();
     VR.app.go('lobby');
   }
@@ -708,6 +702,7 @@
     $('missionBtn').addEventListener('click', openMissions);
     $('ranksBtn').addEventListener('click', openRanks);
     $('skinsBtn').addEventListener('click', function () { openCosmetics(); });
+    $('storeBtn').addEventListener('click', function () { VR.store.open(); });
     $('memBtn').addEventListener('click', openMembership);
     $('codeBtn').addEventListener('click', function () { copyText(code, 'Team code ' + code + ' copied'); });
     $('enterBtn').addEventListener('click', openEnterCode);
@@ -740,5 +735,5 @@
 
   window.VR = window.VR || {};
   VR.sound = true;
-  VR.lobby = { init: init, enter: enter, recordGame: recordGame, refresh: function () { if (user) { renderProfile(); renderSlots(); } } };
+  VR.lobby = { init: init, enter: enter, openSkins: function () { openCosmetics(); }, openUser: function () { return user; }, decorate: function () { renderProfile(); renderSlots(); }, recordGame: recordGame, refresh: function () { if (user) { renderProfile(); renderSlots(); } } };
 })();

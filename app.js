@@ -44,6 +44,7 @@
     if (name === 'game') VR.bg.stop(); else VR.bg.start();
     if (name !== 'lobby') $('chat').classList.remove('on');
     if (name === 'lobby') VR.lobby.refresh();
+    if (VR.music) VR.music.sync(name);
   }
 
   function startGame(cfg) {
