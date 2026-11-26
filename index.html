@@ -193,14 +193,11 @@
   <div class="rotate" id="rotate"><p>Rotate your phone</p><span>Viper Rush plays in landscape</span></div>
 </div>
 
-<!--
-  OPTIONAL: real Google / Facebook login with Firebase.
-  1) Create a Firebase project, enable Authentication > Google and Facebook.
-  2) Paste your Firebase config into js/config.js (firebase: {...}).
-  3) Uncomment these two lines.
+<!-- Firebase: real Google / Facebook login + saving player data in the cloud (Firestore).
+     The config is in js/config.js. If those scripts cannot load (offline), the game still works in demo mode. -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
--->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
 <script src="js/config.js"></script>
 <script src="js/cosmetics.js"></script>
