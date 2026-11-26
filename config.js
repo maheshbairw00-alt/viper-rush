@@ -7,10 +7,19 @@ window.VR_CONFIG = {
   appName: 'Viper Rush',
   version: '1.0.0',
 
-  // Paste your Firebase web config here to turn on REAL Google + Facebook login.
-  // Leave as null to use demo login (works offline, for testing the screens).
+  // Firebase web config = REAL Google + Facebook login and cloud saving.
+  // Set it to null to go back to demo login (works offline, for testing the screens).
   // Example: { apiKey:'...', authDomain:'...', projectId:'...', appId:'...' }
-  firebase: null,
+  firebase: {
+    apiKey: "AIzaSyBJ4q2pw4rjStapy9fqQ_HgXLZaglYfgnc",
+    authDomain: "viper-rush.firebaseapp.com",
+    projectId: "viper-rush",
+    storageBucket: "viper-rush.firebasestorage.app",
+    messagingSenderId: "1045833149627",
+    appId: "1:1045833149627:web:5fba1de8cf32e87c21cd9e"
+  },
+  // Player data: one document per player in this collection.
+  cloudCollection: 'viperrush_users',
 
   squadSize: 5,        // players in one squad (you + 4 friends)
   loadingSeconds: 2.6, // fake loading time (replace with real asset loading later)
