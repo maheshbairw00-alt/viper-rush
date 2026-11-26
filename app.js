@@ -91,7 +91,7 @@
     var q = new URLSearchParams(location.search).get('screen');
     VR.auth.load();
     function afterLoading() {
-      if (VR.auth.user) VR.lobby.enter(VR.auth.user); else go('login');
+      if (VR.auth.user) { VR.lobby.enter(VR.auth.user); setTimeout(function () { VR.auth.pull(); }, 1500); } else go('login');
     }
     if (q && SCREENS.indexOf(q) >= 0) {           // debug shortcut
       if (q === 'loading') { go('loading'); return; }
