@@ -7,8 +7,9 @@
     sens: 100,              // turn speed %
     stickSize: 100, stickOpa: 100, stickX: 0, stickY: 0,
     boostSize: 100, boostX: 0, boostY: 0,
-    healSize: 100,
+    healSize: 100, swap: false, floatStick: false,
     music: true, musicVol: 70, tune: 'venom',
+    sfx: true, sfxVol: 80, vibe: true,
     quality: 'high'         // low / mid / high
   };
   var tmp = null;           // used when nobody is logged in yet
@@ -28,6 +29,7 @@
     st.setProperty('--bsX', get('boostX') * 0.3 + 'vh');
     st.setProperty('--bsY', get('boostY') * 0.3 + 'vh');
     st.setProperty('--hlS', get('healSize') / 100);
+    g.classList.toggle('swap', !!get('swap')); g.classList.toggle('fl', !!get('floatStick'));
     if (VR.game && VR.game.resize) VR.game.resize();
     if (VR.music) VR.music.refresh();
   }
@@ -54,6 +56,7 @@
         '<button type="button" class="gb pk" id="stLogout" style="width:100%;height:calc(var(--u)*8)">LOG OUT</button>';
     } else if (tab === 'ctl') {
       h += slider('sens', 'Turn sensitivity', 60, 160) +
+        toggle('swap', 'Left-handed layout (swap joystick and BOOST sides)') + toggle('floatStick', 'Floating joystick (appears where you touch)') +
         slider('stickSize', 'Joystick size', 70, 140) + slider('stickOpa', 'Joystick opacity', 30, 100) +
         slider('stickX', 'Joystick left / right', -30, 60, 5, '') + slider('stickY', 'Joystick up / down', -30, 30, 5, '') +
         slider('boostSize', 'BOOST button size', 70, 140) +
@@ -61,7 +64,7 @@
         slider('healSize', 'Heal buttons size', 70, 140) +
         '<button type="button" class="gb" id="stReset" style="width:100%">RESET CONTROLS</button>';
     } else if (tab === 'snd') {
-      h += toggle('music', 'Lobby music') + slider('musicVol', 'Music volume', 0, 100) + '<div class="tunes">';
+      h += toggle('music', 'Music (lobby + match)') + slider('musicVol', 'Music volume', 0, 100) + toggle('sfx', 'Sound effects') + slider('sfxVol', 'Effects volume', 0, 100) + toggle('vibe', 'Vibration on kills') + '<p class="note">Lobby tune:</p><div class="tunes">';
       VR.music.TRACKS.forEach(function (t) {
         var ok = VR.music.allowed(t), on = (get('tune') === t.id && ok);
         h += '<button type="button" class="tune' + (on ? ' on' : '') + (ok ? '' : ' lock') + (t.pass ? ' rare' : '') + '" data-tune="' + t.id + '"><b>' + esc(t.n) + '</b><small>' +
@@ -103,7 +106,7 @@
     var t = e.target.closest('button'); if (!t) return;
     if (t.id === 'stX') return close();
     if (t.id === 'stLogout') return doLogout();
-    if (t.id === 'stReset') { ['sens', 'stickSize', 'stickOpa', 'stickX', 'stickY', 'boostSize', 'boostX', 'boostY', 'healSize'].forEach(function (k) { store()[k] = DEF[k]; }); set('sens', DEF.sens); return render(); }
+    if (t.id === 'stReset') { ['sens', 'stickSize', 'stickOpa', 'stickX', 'stickY', 'boostSize', 'boostX', 'boostY', 'healSize', 'swap', 'floatStick'].forEach(function (k) { store()[k] = DEF[k]; }); set('sens', DEF.sens); return render(); }
     if (t.dataset.tab) { tab = t.dataset.tab; return render(); }
     if (t.dataset.tg) { set(t.dataset.tg, !get(t.dataset.tg)); return render(); }
     if (t.dataset.q) { set('quality', t.dataset.q); return render(); }

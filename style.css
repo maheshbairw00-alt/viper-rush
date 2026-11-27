@@ -455,3 +455,14 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--cyan);outline-o
 .pk1:disabled{opacity:.5}
 .pyl a{color:#9DEBFF}
 .legal a{color:#9DEBFF}
+
+/* ---- control layouts (SETTINGS > CONTROLS) ---- */
+.stzone{position:absolute;left:0;top:0;width:55%;height:100%;display:none;touch-action:none}
+#game.swap .stzone{left:auto;right:0}
+#game.fl .stzone{display:block}
+#game.fl .stick{opacity:0;pointer-events:none}
+#game.fl .stick.on{opacity:var(--stO,1)}
+#game.swap .stick{left:auto;right:calc(var(--u)*8 - var(--stX,0px))}
+#game.swap .boost{right:auto;left:calc(var(--u)*9 + var(--bsX,0px))}
+#game.swap .heal.hs,#game.swap .heal.hl{right:auto;left:calc(var(--u)*33)}
+#game.sp .stzone{display:none}

@@ -52,7 +52,7 @@
       for (i = 0; i < m.f.length; i++) { var d = m.f[i]; foods.push({ x: d[0], y: d[1], v: d[2], r: 3 + d[2] * 1.4, ci: d[3], keep: false, z: zoneAt(d[0], d[1]), id: d[4] }); }
     } else if (m.t === 'died' && rs && !rs.dead) {
       rs.dead = true;
-      if (m.by === NET.you && !over) { kills++; $('hudKills').textContent = kills; banner('You eliminated ' + rs.name, 1800); if (anim && anim.t === 'burst') burst(rs.segs[0].x, rs.segs[0].y, anim.c, 22); }
+      if (m.by === NET.you && !over) { onKillFx(rs.name); if (anim && anim.t === 'burst') burst(rs.segs[0].x, rs.segs[0].y, anim.c, 22); }
     } else if (m.t === 'emo' && rs) { rs.emo = { e: m.e, t: 3 };
     } else if (m.t === 'left' && rs) { rs.dead = true;
     } else if (m.t === 'closed' && running && !over) { banner('Connection lost - you play on alone', 3000); }
@@ -137,8 +137,8 @@
   function segCount(s) { return Math.min(260, Math.floor(14 + s.mass * 0.1)); }     // length grows only 0.1 per mass
   function radiusOf(s) { return 8 + Math.min(10, s.mass / 70); }
 
-  function skinList() { return VR.cos.SKINS.filter(function (x) { return !x.pass; }); }
-  function charList() { return VR.cos.CHARS.filter(function (x) { return !x.pass; }); }
+  function skinList() { return VR.cos.SKINS.filter(function (x) { return !x.pass && !x.spin; }); }
+  function charList() { return VR.cos.CHARS.filter(function (x) { return !x.pass && !x.spin; }); }
 
   function makeSnake(o) {
     var ang = Math.random() * 6.283;
@@ -198,13 +198,25 @@
   function aliveCount() { var n = 0; for (var i = 0; i < snakes.length; i++) if (!snakes[i].dead) n++; return n; }
   function aliveMates() { return snakes.filter(function (m) { return m.mate && !m.dead; }); }
 
+  var killTimes = [];
+  var KTITLES = ['', '', 'DOUBLE KILL', 'TRIPLE KILL', 'MEGA KILL', 'UNSTOPPABLE'];
+  function onKillFx(name) {                                  // the player eliminated someone: make it very clear
+    kills++; var hk = $('hudKills'); hk.textContent = kills; hk.classList.remove('pop'); void hk.offsetWidth; hk.classList.add('pop');
+    killTimes = killTimes.filter(function (t) { return matchT - t < 9; }); killTimes.push(matchT);
+    var n = killTimes.length, kp = $('killPop');
+    $('kpMain').textContent = 'YOU ELIMINATED ' + String(name || '').toUpperCase(); $('kpSub').textContent = n > 1 ? KTITLES[Math.min(n, 5)] : '';
+    kp.classList.toggle('big', n > 1); kp.classList.remove('on'); void kp.offsetWidth; kp.classList.add('on');
+    if (VR.sfx) { VR.sfx.play('kill', { n: n }); VR.sfx.vibrate(n > 1 ? [40, 30, 70] : 55); }
+  }
+
   function kill(s, by) {
     if (s.dead) return;
     s.dead = true; dropDeathFood(s);
     if (by) {
       by.kills++;
-      if (by.isPlayer) { kills++; $('hudKills').textContent = kills; if (anim && anim.t === 'burst') burst(s.segs[0].x, s.segs[0].y, anim.c, 22); }
+      if (by.isPlayer) { onKillFx(s.name); if (anim && anim.t === 'burst') burst(s.segs[0].x, s.segs[0].y, anim.c, 22); }
     }
+    if (s.isPlayer && VR.sfx) VR.sfx.play('die');
     if (s.isPlayer) { if (NET) VR.net.send({ t: 'died', by: by && by.netId ? by.netId : null }); onPlayerDown(by); }
   }
 
@@ -229,7 +241,7 @@
     rebuild(p, sp.x, sp.y); cam.x = sp.x; cam.y = sp.y;
     hearts = []; leaveSpec();
     if (anim && anim.t === 'spawn') portal = { x: sp.x, y: sp.y, t: 1.4 };
-    banner(msg, 2600);
+    banner(msg, 2600); if (VR.sfx) VR.sfx.play('revive');
   }
   function enterSpec() {
     spec.on = true; spec.idx = 0; spec.reported = false;
@@ -266,8 +278,10 @@
       if (s.dropT > .2) { s.dropT = 0; var t = s.segs[s.segs.length - 1]; addFood(t.x, t.y, 1, s.ci, false); }
       if (s.mass <= 12) s.boost = false;
     }
+    var hp0 = s.hp;
     if (z === 4 && s.fx.sh <= 0) s.hp -= 2.5 * dt;                         // lava burns HP
     if (outsideSafe(h.x, h.y, safeRect(matchT), 0)) s.hp -= (4 + 10 * shrinkK(matchT)) * dt;   // red wall burns HP
+    if (s.isPlayer && s.hp < hp0 && VR.sfx) VR.sfx.play('hurt');
     if (s.hp <= 0) { s.hp = 0; kill(s, null); return; }
     if (s.fx.sh > 0) s.fx.sh -= dt; if (s.fx.mg > 0) s.fx.mg -= dt; if (s.fx.sp > 0) s.fx.sp -= dt;
     var want = segCount(s);
@@ -284,7 +298,7 @@
       var d2 = dx * dx + dy * dy, m = hr + f.r + reach;
       if (d2 < m * m) {
         if (d2 < (hr + f.r) * (hr + f.r)) {
-          s.mass += f.v * 0.5; if (s.isPlayer) orbs++;
+          s.mass += f.v * 0.5; if (s.isPlayer) { orbs++; if (VR.sfx) VR.sfx.play('eat'); }
           if (NET && s.isPlayer && f.id != null) eatQ.push(f.id);
           if (f.keep && NET) respawnStatic(f);
           else if (f.keep) { var p = randInZone(f.z); f.x = p.x; f.y = p.y; f.v = baseFoodV(f.z); f.r = 3 + f.v * 1.4; f.ci = (Math.random() * PAL.length) | 0; }
@@ -296,7 +310,7 @@
       var gx = h.x - golden.x, gy = h.y - golden.y;
       if (gx * gx + gy * gy < (hr + golden.r) * (hr + golden.r)) {
         s.mass += golden.v;
-        if (s.isPlayer) banner('GOLDEN ORB!  +' + Math.round(golden.v * 10), 2200);
+        if (s.isPlayer) { banner('GOLDEN ORB!  +' + Math.round(golden.v * 10), 2200); if (VR.sfx) VR.sfx.play('golden'); }
         golden = null; nextGold = matchT + (G.goldenEvery || 50);
       }
     }
@@ -305,7 +319,7 @@
       var ux = h.x - u.x, uy = h.y - u.y;
       if (ux * ux + uy * uy < (hr + 24) * (hr + 24)) {
         var fx = FX[u.type]; s.fx[fx.k] = fx.t; u.cd = 22;
-        if (s.isPlayer) banner(fx.n + '!', 1500);
+        if (s.isPlayer) { banner(fx.n + '!', 1500); if (VR.sfx) VR.sfx.play('power'); }
       }
     }
     if (s.hp < HPMAX) for (i = 0; i < meds.length; i++) {          // medkits on the ground
@@ -313,12 +327,12 @@
       var mx = h.x - md2.x, my = h.y - md2.y, mr = hr + (md2.big ? 26 : 20);
       if (mx * mx + my * my < mr * mr) {
         s.hp = Math.min(HPMAX, s.hp + (md2.big ? HEAL.l.hp : HEAL.s.hp)); md2.cd = 45;
-        if (s.isPlayer) banner('+' + (md2.big ? HEAL.l.hp : HEAL.s.hp) + ' HP', 1200);
+        if (s.isPlayer) { banner('+' + (md2.big ? HEAL.l.hp : HEAL.s.hp) + ' HP', 1200); if (VR.sfx) VR.sfx.play('heal'); }
       }
     }
     if (s.isPlayer) for (i = 0; i < mcoins.length; i++) {          // match coins (for healing)
       var c = mcoins[i], cx = h.x - c.x, cy = h.y - c.y, cr = hr + 14 + (mag ? 120 : 0);
-      if (cx * cx + cy * cy < cr * cr) { myCoins += c.v; var np = randInZone(c.z); c.x = np.x; c.y = np.y; }
+      if (cx * cx + cy * cy < cr * cr) { if (VR.sfx) VR.sfx.play('coin'); myCoins += c.v; var np = randInZone(c.z); c.x = np.x; c.y = np.y; }
     }
     if (s.mate && player.dead && hearts.length) {                  // teammate touches your heart
       var he = hearts[0], hx = h.x - he.x, hy = h.y - he.y;
@@ -489,7 +503,7 @@
     if (NET) { G = {}; for (var gk in VR_CONFIG.game) G[gk] = VR_CONFIG.game[gk]; G.worldSize = NET.world; G.zoneMinSize = Math.min(G.zoneMinSize, NET.world * .15); }
     WORLD = G.worldSize; GOLD_R = WORLD * .11; HPMAX = G.hpMax || 100;
     snakes = []; foods = []; rocks = []; pickups = []; meds = []; mcoins = []; hearts = []; parts = []; portal = null; golden = null; nextGold = 25;
-    kills = 0; orbs = 0; myCoins = 0; over = false; paused = false; uid = 0; matchT = 0; tAcc = 0; flags = {}; mapOpen = false; winT = 0; winFx = 0;
+    kills = 0; killTimes = []; $('hudKills').classList.remove('pop'); $('killPop').classList.remove('on'); orbs = 0; myCoins = 0; over = false; paused = false; uid = 0; matchT = 0; tAcc = 0; flags = {}; mapOpen = false; winT = 0; winFx = 0;
     rv = { auto: false, heart: false }; heal = { casting: false, t: 0, size: 's', cd: 0 }; deadPlace = 0; diedT = 0; killerName = ''; lastHp = -1;
     spec = { on: false, idx: 0, liked: {}, reported: false };
     var u = cfg.user || {}, eq = u.eq || {};
@@ -557,11 +571,11 @@
     cancelAnimationFrame(raf); raf = requestAnimationFrame(frame);
   }
 
-  function stop() { running = false; cancelAnimationFrame(raf); if (VR.rtc) VR.rtc.stop(); if (NET) { VR.net.onGame = null; VR.net.close(); } }
+  function stop() { running = false; cancelAnimationFrame(raf); if (VR.sfx) VR.sfx.boost(false); if (VR.rtc) VR.rtc.stop(); if (NET) { VR.net.onGame = null; VR.net.close(); } }
 
   function endGame(kind) {
     if (over) return;
-    over = true; leaveSpec(); if (VR.rtc) VR.rtc.stop(); if (NET) { VR.net.onGame = null; VR.net.close(); }
+    over = true; leaveSpec(); if (VR.sfx) { VR.sfx.boost(false); if (kind === 'win') VR.sfx.play('win'); } if (VR.music) { VR.music.intensity(false); VR.music.duck(.35); } if (VR.rtc) VR.rtc.stop(); if (NET) { VR.net.onGame = null; VR.net.close(); }
     var alive = snakes.filter(function (s) { return !s.dead; });
     var place;
     if (kind === 'win') place = 1;
@@ -638,9 +652,9 @@
         $('specReport').firstChild.nodeValue = 'REPORT ' + (killerName && killerName !== 'RED WALL' ? killerName.toUpperCase() : (tg ? tg.name.toUpperCase() : ''));
       }
     }
-    if (!flags.zs && matchT >= G.zoneStart) { flags.zs = 1; banner('RED WALL IS CLOSING IN!', 2800); }
-    if (!flags.ze && matchT >= G.zoneEnd) { flags.ze = 1; banner('FINAL ZONE!', 2400); }
-    if (!flags.t60 && matchT >= G.matchSeconds - 60) { flags.t60 = 1; banner('1 MINUTE LEFT', 2000); }
+    if (!flags.zs && matchT >= G.zoneStart) { flags.zs = 1; banner('RED WALL IS CLOSING IN!', 2800); if (VR.sfx) VR.sfx.play('warn'); }
+    if (!flags.ze && matchT >= G.zoneEnd) { flags.ze = 1; banner('FINAL ZONE!', 2400); if (VR.sfx) VR.sfx.play('warn'); }
+    if (!flags.t60 && matchT >= G.matchSeconds - 60) { flags.t60 = 1; banner('1 MINUTE LEFT', 2000); if (VR.sfx) VR.sfx.play('warn'); }
     talkT -= dt;
     if (talkT <= 0) {
       talkT = .6;
@@ -920,6 +934,7 @@
       }
       collisions();
       stepFx(dt); netTick(dt);
+      if (VR.sfx) VR.sfx.boost(!over && !player.dead && player.boost);
       for (var q = 0; q < pickups.length; q++) {
         var pu = pickups[q]; if (pu.cd > 0) { pu.cd -= dt; if (pu.cd <= 0) { var np = freeSpot(0); pu.x = np.x; pu.y = np.y; } }
       }
@@ -933,6 +948,7 @@
         winT -= dt;
         if (winT <= 0) {
           winT = .4;
+          if (VR.music) VR.music.intensity(aliveCount() <= 8 || matchT >= G.zoneEnd);
           if ((!NET || hadEnemy) && !snakes.some(function (x) { return !x.dead && x.team !== 1; })) endGame('win');
           else if (player.dead && !aliveMates().length) endGame('dead');
         }
@@ -972,6 +988,23 @@
     stick.addEventListener('pointermove', function (e) { if (e.pointerId === pid) move(e); });
     function up(e) { if (e.pointerId !== pid) return; pid = null; input.mag = 0; knob.style.transform = ''; }
     stick.addEventListener('pointerup', up); stick.addEventListener('pointercancel', up);
+
+    // floating joystick: the stick appears under the thumb (only when SETTINGS > CONTROLS > Floating joystick is on)
+    var zone = $('stZone'), zpid = null;
+    zone.addEventListener('pointerdown', function (e) {
+      if (zpid !== null) return;
+      zpid = e.pointerId; try { zone.setPointerCapture(zpid); } catch (x) {} input.touch = true;
+      var h = stick.parentNode.getBoundingClientRect();
+      stick.style.right = 'auto'; stick.style.bottom = 'auto';
+      stick.style.left = (e.clientX - h.left - stick.offsetWidth / 2) + 'px'; stick.style.top = (e.clientY - h.top - stick.offsetHeight / 2) + 'px';
+      stick.classList.add('on'); move(e); e.preventDefault();
+    });
+    zone.addEventListener('pointermove', function (e) { if (e.pointerId === zpid) move(e); });
+    function zup(e) {
+      if (e.pointerId !== zpid) return; zpid = null; input.mag = 0; knob.style.transform = '';
+      stick.classList.remove('on'); stick.style.left = stick.style.top = stick.style.right = stick.style.bottom = '';
+    }
+    zone.addEventListener('pointerup', zup); zone.addEventListener('pointercancel', zup);
 
     var bb = $('boostBtn');
     function bset(v) { input.boost = v; bb.classList.toggle('hold', v); }

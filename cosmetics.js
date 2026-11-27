@@ -28,6 +28,7 @@
     { id: 'L4', n: 'Thunder strike', p: 2899, a: [255, 225, 60], b: [30, 60, 170], t: 'th', L: 1 },
     { id: 'L5', n: 'Skeleton', p: 3299, a: [235, 235, 240], b: [20, 20, 28], t: 'bn', L: 1 },
     { id: 'L6', n: 'Magma core', p: 3799, a: [255, 130, 30], b: [45, 15, 10], t: 'mg', L: 1 },
+    { id: 'sx1', n: 'Void Reaper', p: 0, spin: 1, a: [150, 60, 255], b: [8, 0, 24], t: 'sp', L: 1 },
     { id: 'sp1', n: 'Royal scales', p: 0, pass: 1, a: [255, 215, 70], b: [60, 20, 110], t: 'stripe', L: 1 }
   ];
 
@@ -45,6 +46,7 @@
     { id: 'LC4', n: 'Dragon emperor', p: 3999, a: '#E0312B', b: '#7A0F10', e: '#FFD23F', t: 'D', L: 1, note: 'Gold horns and crown' },
     { id: 'LC5', n: 'Blood moon', p: 4299, a: '#8E1020', b: '#2A0509', e: '#FFFFFF', t: 'B', L: 1, note: 'Scars and red moon' },
     { id: 'LC6', n: 'Magma demon', p: 4999, a: '#2B1B1B', b: '#0A0505', e: '#FF8A1F', t: 'M', L: 1, note: 'Burning cracks' },
+    { id: 'cx1', n: 'Abyss Fang', p: 0, spin: 1, a: '#3B1C7A', b: '#12052E', e: '#00F0FF', t: 'V', L: 1, note: 'Reward spin' },
     { id: 'csov', n: 'Viper Sovereign', p: 0, pass: 1, a: '#FFD23F', b: '#3A1A00', e: '#FFF3A8', t: 'K', L: 1, note: 'Season 1 only' }
   ];
 
