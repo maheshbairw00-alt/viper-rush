@@ -454,3 +454,4 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--cyan);outline-o
 .pk1 em{position:absolute;top:calc(var(--u)*-1.2);left:50%;transform:translateX(-50%);font-style:normal;font-size:calc(var(--u)*1.7);font-weight:800;background:#FFB11F;color:#3A1A00;padding:calc(var(--u)*.3) calc(var(--u)*1.2);border-radius:calc(var(--u)*2);white-space:nowrap}
 .pk1:disabled{opacity:.5}
 .pyl a{color:#9DEBFF}
+.legal a{color:#9DEBFF}
