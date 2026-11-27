@@ -34,17 +34,20 @@ function getCerts(cb) {
     res.on('end', () => { try { certs = JSON.parse(d); certsAt = Date.now(); cb(certs); } catch (e) { cb(null); } });
   }).on('error', () => cb(null));
 }
-function verifyAdmin(tok, cb) {
+function verifyUser(tok, cb) {                       // checks a Firebase login token, gives back its data (uid, email) or null
   try {
     const [h, p, sig] = String(tok).split('.');
     const head = JSON.parse(Buffer.from(h, 'base64url')), pay = JSON.parse(Buffer.from(p, 'base64url'));
-    if (pay.aud !== FB_PROJECT || pay.iss !== 'https://securetoken.google.com/' + FB_PROJECT || pay.exp * 1000 < Date.now() || head.alg !== 'RS256') return cb(false);
+    if (pay.aud !== FB_PROJECT || pay.iss !== 'https://securetoken.google.com/' + FB_PROJECT || pay.exp * 1000 < Date.now() || head.alg !== 'RS256' || !pay.sub) return cb(null);
     getCerts((c) => {
-      const cert = c && c[head.kid]; if (!cert) return cb(false);
+      const cert = c && c[head.kid]; if (!cert) return cb(null);
       const ok = crypto.createVerify('RSA-SHA256').update(h + '.' + p).verify(cert, Buffer.from(sig, 'base64url'));
-      cb(!!(ok && pay.email_verified !== false && ADMINS.indexOf(String(pay.email || '').toLowerCase()) >= 0));
+      cb(ok ? { uid: pay.sub, email: String(pay.email || '').toLowerCase(), verified: pay.email_verified !== false } : null);
     });
-  } catch (e) { cb(false); }
+  } catch (e) { cb(null); }
+}
+function verifyAdmin(tok, cb) {
+  verifyUser(tok, (u) => cb(!!(u && u.verified && ADMINS.indexOf(u.email) >= 0)));
 }
 
 /* ---------- tiny WebSocket (RFC 6455) ---------- */
@@ -223,8 +226,138 @@ function leave(me) {
   if (r.players.size === 0) closeRoom(r);
 }
 
+/* ---------- payments (Razorpay) ----------
+ * Settings (set them in Render -> Environment, NEVER in the game files):
+ *  RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET   from the Razorpay dashboard (test keys first, live keys later)
+ *  RAZORPAY_WEBHOOK_SECRET                 optional, the secret you type when you create the webhook
+ *  FIREBASE_SERVICE_ACCOUNT                the whole JSON of the Firebase service account key (lets the server write the payment record)
+ * The player never sets the price: the browser only says which pack it wants, the price and the diamonds come from this table.
+ */
+const RZP_KEY = process.env.RAZORPAY_KEY_ID || '', RZP_SECRET = process.env.RAZORPAY_KEY_SECRET || '', RZP_HOOK = process.env.RAZORPAY_WEBHOOK_SECRET || '';
+const RZP_BASE = process.env.RAZORPAY_BASE || 'https://api.razorpay.com';
+const FS_BASE = process.env.FIRESTORE_BASE || 'https://firestore.googleapis.com';
+const PACKS = {           // gems = diamonds the player gets, rs = price in rupees  (keep js/pay.js in step with this table)
+  d100: { gems: 100, rs: 90 }, d300: { gems: 300, rs: 270 }, d500: { gems: 500, rs: 450 },
+  d1000: { gems: 1000, rs: 900 }, d2000: { gems: 2000, rs: 1800 }, d3000: { gems: 3000, rs: 2000 }
+};
+const ORIGINS = (process.env.ALLOW_ORIGINS || 'https://maheshbairw00-alt.github.io,http://localhost:8123,http://127.0.0.1:8123').split(',').map((x) => x.trim());
+
+function call(method, url, headers, body, cb) {       // small https/http helper -> cb(err, status, json)
+  let u; try { u = new URL(url); } catch (e) { return cb(e); }
+  const lib = u.protocol === 'http:' ? http : https;
+  const data = body == null ? null : (typeof body === 'string' ? body : JSON.stringify(body));
+  const h = Object.assign({}, headers); if (data != null) { h['Content-Length'] = Buffer.byteLength(data); if (!h['Content-Type']) h['Content-Type'] = 'application/json'; }
+  const rq = lib.request({ method, hostname: u.hostname, port: u.port || undefined, path: u.pathname + u.search, headers: h, timeout: 15000 }, (res) => {
+    let d = ''; res.on('data', (c) => { d += c; });
+    res.on('end', () => { let j = null; try { j = JSON.parse(d); } catch (e) {} cb(null, res.statusCode, j); });
+  });
+  rq.on('error', (e) => cb(e)); rq.on('timeout', () => { rq.destroy(new Error('timeout')); });
+  if (data != null) rq.write(data); rq.end();
+}
+const rzpAuth = () => ({ Authorization: 'Basic ' + Buffer.from(RZP_KEY + ':' + RZP_SECRET).toString('base64') });
+const rzp = (method, path, body, cb) => call(method, RZP_BASE + path, rzpAuth(), body, cb);
+
+// a Google access token for the Firestore REST api, made from the service account key
+let gTok = null, gExp = 0;
+function googleToken(cb) {
+  if (process.env.TEST_GTOKEN) return cb(null, process.env.TEST_GTOKEN);
+  if (gTok && Date.now() < gExp - 60e3) return cb(null, gTok);
+  let sa; try { sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || ''); } catch (e) { return cb(new Error('FIREBASE_SERVICE_ACCOUNT missing')); }
+  const now = Math.floor(Date.now() / 1000), b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const un = b64({ alg: 'RS256', typ: 'JWT' }) + '.' + b64({ iss: sa.client_email, scope: 'https://www.googleapis.com/auth/datastore', aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 });
+  let sig; try { sig = crypto.createSign('RSA-SHA256').update(un).sign(sa.private_key, 'base64url'); } catch (e) { return cb(new Error('bad service account key')); }
+  call('POST', 'https://oauth2.googleapis.com/token', { 'Content-Type': 'application/x-www-form-urlencoded' },
+    'grant_type=' + encodeURIComponent('urn:ietf:params:oauth:grant-type:jwt-bearer') + '&assertion=' + un + '.' + sig, (err, st, j) => {
+      if (err || st !== 200 || !j || !j.access_token) return cb(err || new Error('google token ' + st));
+      gTok = j.access_token; gExp = Date.now() + (j.expires_in || 3600) * 1000; cb(null, gTok);
+    });
+}
+// writes viperrush_payments/{paymentId}; the same payment can never be written twice (Firestore answers 409)
+function writePayment(rec, cb) {
+  googleToken((err, tok) => {
+    if (err) return cb(err);
+    const f = { uid: { stringValue: rec.uid }, gems: { integerValue: String(rec.gems) }, amount: { integerValue: String(rec.amount) }, pack: { stringValue: rec.pack },
+      orderId: { stringValue: rec.orderId }, paymentId: { stringValue: rec.paymentId }, claimed: { booleanValue: false }, ts: { integerValue: String(Date.now()) } };
+    call('POST', FS_BASE + '/v1/projects/' + FB_PROJECT + '/databases/(default)/documents/viperrush_payments?documentId=' + encodeURIComponent(rec.paymentId),
+      { Authorization: 'Bearer ' + tok }, { fields: f }, (e, st) => { if (e) return cb(e); cb(null, st === 200 ? 'new' : st === 409 ? 'dup' : 'err' + st); });
+  });
+}
+// checks a payment with Razorpay itself and records it. expectUid = the logged in player (or null from the webhook)
+function creditPayment(orderId, paymentId, expectUid, cb) {
+  rzp('GET', '/v1/orders/' + encodeURIComponent(orderId), null, (e1, s1, order) => {
+    if (e1 || s1 !== 200 || !order) return cb('order');
+    const n = order.notes || {}, pk = PACKS[n.pack];
+    if (!pk || !n.uid || (expectUid && n.uid !== expectUid)) return cb('mismatch');
+    if (order.amount !== pk.rs * 100 || order.currency !== 'INR') return cb('amount');
+    rzp('GET', '/v1/payments/' + encodeURIComponent(paymentId), null, (e2, s2, pay) => {
+      if (e2 || s2 !== 200 || !pay || pay.order_id !== orderId || pay.amount !== order.amount) return cb('payment');
+      const done = (p) => {
+        if (p.status !== 'captured') return cb('notpaid');
+        writePayment({ uid: n.uid, gems: pk.gems, amount: pk.rs, pack: n.pack, orderId, paymentId }, (e3, r) => {
+          if (e3 || String(r).indexOf('err') === 0) return cb('save'); cb(null, { gems: pk.gems, dup: r === 'dup' });
+        });
+      };
+      if (pay.status === 'authorized') rzp('POST', '/v1/payments/' + encodeURIComponent(paymentId) + '/capture', { amount: pay.amount, currency: 'INR' }, (e4, s4, p2) => done(e4 || s4 !== 200 ? pay : p2));
+      else done(pay);
+    });
+  });
+}
+const orderLog = new Map();            // uid -> times, a small limit so nobody can spam orders
+function orderOk(uid) { const t = Date.now(), a = (orderLog.get(uid) || []).filter((x) => t - x < 3600e3); if (a.length >= 15) return false; a.push(t); orderLog.set(uid, a); return true; }
+const safeEq = (a, b) => { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); };
+
+function readBody(req, cb) {
+  let d = '', big = false;
+  req.on('data', (c) => { d += c; if (d.length > 20000) { big = true; req.destroy(); } });
+  req.on('end', () => { if (!big) cb(d); });
+}
+function sendJson(res, code, obj, origin) {
+  const h = { 'Content-Type': 'application/json' };
+  if (origin && ORIGINS.indexOf(origin) >= 0) { h['Access-Control-Allow-Origin'] = origin; h['Vary'] = 'Origin'; }
+  res.writeHead(code, h); res.end(JSON.stringify(obj));
+}
+function payRoute(req, res) {
+  const path = req.url.split('?')[0], origin = req.headers.origin;
+  if (req.method === 'OPTIONS') {
+    const h = { 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '86400' };
+    if (ORIGINS.indexOf(origin) >= 0) { h['Access-Control-Allow-Origin'] = origin; h['Vary'] = 'Origin'; }
+    res.writeHead(204, h); return res.end();
+  }
+  if (req.method !== 'POST') return sendJson(res, 405, { error: 'post' }, origin);
+  if (!RZP_KEY || !RZP_SECRET) return sendJson(res, 503, { error: 'not_configured' }, origin);
+  readBody(req, (raw) => {
+    if (path === '/pay/webhook') {                                  // Razorpay tells us a payment was captured, even if the player closed the app
+      if (!RZP_HOOK) return sendJson(res, 503, { error: 'no_webhook_secret' });
+      const want = crypto.createHmac('sha256', RZP_HOOK).update(raw).digest('hex');
+      if (!safeEq(want, req.headers['x-razorpay-signature'] || '')) return sendJson(res, 400, { error: 'sig' });
+      let ev; try { ev = JSON.parse(raw); } catch (e) { return sendJson(res, 400, { error: 'json' }); }
+      const pe = ev && ev.payload && ev.payload.payment && ev.payload.payment.entity;
+      if (!pe || (ev.event !== 'payment.captured' && ev.event !== 'order.paid')) return sendJson(res, 200, { ok: true, ignored: true });
+      return creditPayment(pe.order_id, pe.id, null, (err) => sendJson(res, err && err !== 'mismatch' ? 500 : 200, { ok: !err, err: err || undefined }));
+    }
+    let b; try { b = JSON.parse(raw); } catch (e) { return sendJson(res, 400, { error: 'json' }, origin); }
+    verifyUser(b.token, (u) => {
+      if (!u) return sendJson(res, 401, { error: 'login' }, origin);
+      if (path === '/pay/order') {
+        const pk = PACKS[b.pack]; if (!pk) return sendJson(res, 400, { error: 'pack' }, origin);
+        if (!orderOk(u.uid)) return sendJson(res, 429, { error: 'slow_down' }, origin);
+        rzp('POST', '/v1/orders', { amount: pk.rs * 100, currency: 'INR', receipt: ('vr' + Date.now().toString(36) + u.uid.slice(0, 8)).slice(0, 40), notes: { uid: u.uid, pack: b.pack } }, (err, st, o) => {
+          if (err || st !== 200 || !o || !o.id) return sendJson(res, 502, { error: 'razorpay' }, origin);
+          sendJson(res, 200, { order_id: o.id, amount: o.amount, key: RZP_KEY, gems: pk.gems }, origin);
+        });
+      } else if (path === '/pay/verify') {
+        const oid = String(b.order_id || ''), pid = String(b.payment_id || '');
+        const want = crypto.createHmac('sha256', RZP_SECRET).update(oid + '|' + pid).digest('hex');
+        if (!safeEq(want, String(b.signature || ''))) return sendJson(res, 400, { error: 'sig' }, origin);
+        creditPayment(oid, pid, u.uid, (err, r) => err ? sendJson(res, 400, { error: err }, origin) : sendJson(res, 200, { ok: true, gems: r.gems }, origin));
+      } else sendJson(res, 404, { error: 'nope' }, origin);
+    });
+  });
+}
+
 /* ---------- http server ---------- */
 const server = http.createServer((req, res) => {
+  if (req.url.indexOf('/pay/') === 0) return payRoute(req, res);
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.end('Viper Rush server is running. Rooms: ' + rooms.size + '\n');
 });

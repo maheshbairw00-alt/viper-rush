@@ -29,7 +29,8 @@ pre{white-space:pre-wrap;background:#0B0720;border-radius:10px;padding:10px;font
 <div id="app" class="hide">
   <div class="row"><div id="who" style="font-size:13px;color:#A99BE0"></div><button class="g" id="out">Sign out</button></div>
   <div class="msg" id="denied"></div>
-  <div class="tabs"><button id="tp" class="on">PLAYERS</button><button id="tr">REPORTS</button><button id="te">EVENTS</button><button id="tm">MAIL</button><button id="tg">ROOMS</button><button id="tl">LIVE</button></div>
+  <div class="tabs"><button id="tp" class="on">PLAYERS</button><button id="tr">REPORTS</button><button id="te">EVENTS</button><button id="tm">MAIL</button><button id="tg">ROOMS</button><button id="tl">LIVE</button><button id="ty">PAYMENTS</button></div>
+  <div id="vy" class="hide"><div class="msg" id="y_msg"></div><div id="ylist"></div></div>
 
   <div id="vp">
     <input id="q" placeholder="Search name or player ID" autocomplete="off">
@@ -128,10 +129,24 @@ pre{white-space:pre-wrap;background:#0B0720;border-radius:10px;padding:10px;font
   }
 
   function tab(t) {
-    ['p', 'r', 'e', 'm', 'g', 'l'].forEach(function (k) { $('t' + k).classList.toggle('on', t === k); $('v' + k).classList.toggle('hide', t !== k); });
-    if (t === 'r') loadReports(); else if (t === 'e') loadEvents(); else if (t === 'm') loadMail(); else if (t === 'g') loadRooms(); else if (t === 'l') liveList();
+    ['p', 'r', 'e', 'm', 'g', 'l', 'y'].forEach(function (k) { $('t' + k).classList.toggle('on', t === k); $('v' + k).classList.toggle('hide', t !== k); });
+    if (t === 'r') loadReports(); else if (t === 'e') loadEvents(); else if (t === 'm') loadMail(); else if (t === 'g') loadRooms(); else if (t === 'l') liveList(); else if (t === 'y') loadPay();
   }
-  $('tp').onclick = function () { tab('p'); }; $('tr').onclick = function () { tab('r'); }; $('te').onclick = function () { tab('e'); }; $('tm').onclick = function () { tab('m'); }; $('tg').onclick = function () { tab('g'); }; $('tl').onclick = function () { tab('l'); };
+  $('tp').onclick = function () { tab('p'); }; $('tr').onclick = function () { tab('r'); }; $('te').onclick = function () { tab('e'); }; $('tm').onclick = function () { tab('m'); }; $('tg').onclick = function () { tab('g'); }; $('tl').onclick = function () { tab('l'); }; $('ty').onclick = function () { tab('y'); };
+
+  /* ---------- payments ---------- */
+  function loadPay() {
+    $('y_msg').textContent = 'Loading...';
+    db.collection('viperrush_payments').orderBy('ts', 'desc').limit(100).get().then(function (snap) {
+      var tot = 0, h = '';
+      snap.forEach(function (d) {
+        var r = d.data(); tot += r.amount | 0;
+        h += '<div class="p"><div><b>Rs ' + (r.amount | 0) + ' &middot; ' + (r.gems | 0) + ' diamonds</b><small>' + new Date(r.ts).toLocaleString() + ' &middot; ' + (r.claimed ? 'taken by player' : 'waiting for player') + '<br>player id: ' + esc(r.uid) + '<br>' + esc(r.paymentId) + '</small></div></div>';
+      });
+      $('y_msg').textContent = snap.size + ' payments, total Rs ' + tot + ' (last 100)';
+      $('ylist').innerHTML = h;
+    }).catch(function (e) { $('y_msg').textContent = 'Error: ' + (e.code || e.message); });
+  }
 
   /* ---------- players ---------- */
   function loadPlayers() {

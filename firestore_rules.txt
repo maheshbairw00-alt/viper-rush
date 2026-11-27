@@ -1,0 +1,84 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // CHANGE THIS to your admin Google email (the one you sign in with on admin.html)
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['maheshbohra347@gmail.com'];
+    }
+
+    // each player: only their own data
+    match /viperrush_users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if isAdmin();
+    }
+
+    // gifts and bans written by the admin; the player can only read their own
+    match /viperrush_admin/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if isAdmin();
+    }
+
+    // reports: any logged in player can send one, only the admin can read them
+    match /viperrush_reports/{reportId} {
+      allow create: if request.auth != null && request.resource.data.byId == request.auth.uid;
+      allow read, update: if isAdmin();
+    }
+
+    // EVENTS screen: everybody can read, only the admin writes
+    match /viperrush_events/{eventId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // MAIL: a player reads only mail for ALL or for themselves; the admin writes anything.
+    // Players may create a GIFT mail (an item only, never diamonds/coins/xp) for another player.
+    match /viperrush_mail/{mailId} {
+      allow read: if request.auth != null && (resource.data.to == 'all' || resource.data.to == request.auth.uid);
+      allow read, write: if isAdmin();
+      allow create: if request.auth != null
+        && request.resource.data.fromId == request.auth.uid
+        && request.resource.data.type == 'gift'
+        && request.resource.data.to is string
+        && request.resource.data.to != 'all'
+        && request.resource.data.keys().hasOnly(['to', 'type', 'from', 'fromId', 'title', 'body', 'item', 'ts', 'exp'])
+        && request.resource.data.item.keys().hasOnly(['kind', 'id']);
+    }
+
+    // Player ID -> account lookup (used to send gifts). Each player writes only their own entry.
+    match /viperrush_ids/{pid} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow update: if request.auth != null && resource.data.uid == request.auth.uid && request.resource.data.uid == request.auth.uid;
+      allow read, write: if isAdmin();
+    }
+
+    // Custom rooms / tournaments made in the admin panel: everybody can read, only the admin writes
+    match /viperrush_rooms/{code} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // A player saves their own result after a custom room match (one time); only the admin reads them
+    match /viperrush_results/{rid} {
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && rid == request.resource.data.room + '_' + request.auth.uid;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Paid diamonds. Only the server (service account) can create a record. The player can read their own
+    // and can only flip "claimed" from false to true; the admin can read everything.
+    match /viperrush_payments/{pid} {
+      allow read: if request.auth != null && (resource.data.uid == request.auth.uid || isAdmin());
+      allow update: if request.auth != null
+        && resource.data.uid == request.auth.uid
+        && resource.data.claimed == false
+        && request.resource.data.claimed == true
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['claimed']);
+      allow create, delete: if false;
+    }
+  }
+}

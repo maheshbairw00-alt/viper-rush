@@ -419,3 +419,38 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--cyan);outline-o
 .evr{font-size:calc(var(--u)*2.6);color:#FFE45C;font-weight:700;letter-spacing:.05em}
 .evc .gb{align-self:flex-start}
 .gft{margin-top:calc(var(--u)*.8);min-width:0;width:100%;background:rgba(236,72,153,.25);color:#FBCFE8;box-shadow:inset 0 0 0 1.5px #EC4899}
+
+/* ---- kill pop-up ---- */
+.killpop{position:absolute;left:50%;top:calc(var(--u)*30);transform:translate(-50%,0) scale(.6);opacity:0;pointer-events:none;text-align:center;display:flex;flex-direction:column;align-items:center;gap:calc(var(--u)*.4);text-shadow:0 3px 0 rgba(0,0,0,.6),0 0 24px rgba(255,59,92,.8)}
+.killpop b{font-size:calc(var(--u)*6.4);letter-spacing:.1em;color:#fff;white-space:nowrap}
+.killpop small{font-size:calc(var(--u)*4.4);font-weight:800;letter-spacing:.14em;color:#FFE45C;white-space:nowrap;min-height:1em}
+.killpop.on{animation:kpop 1.7s ease-out forwards}
+.killpop.big small{color:#FF5A5A;font-size:calc(var(--u)*5.4)}
+@keyframes kpop{0%{opacity:0;transform:translate(-50%,10px) scale(.5)}12%{opacity:1;transform:translate(-50%,0) scale(1.18)}22%{transform:translate(-50%,0) scale(1)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-14px) scale(1)}}
+#hudKills.pop{animation:kcnt .5s ease-out}
+@keyframes kcnt{0%{transform:scale(1);color:inherit}30%{transform:scale(1.9);color:#FF5A5A;text-shadow:0 0 14px #FF3B5C}100%{transform:scale(1)}}
+
+/* ---- reward spins ---- */
+.spg{display:grid;grid-template-columns:repeat(6,1fr);gap:calc(var(--u)*1.2);margin:calc(var(--u)*1.2) 0}
+.spg.m5{grid-template-columns:repeat(5,1fr)}
+.spt{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:calc(var(--u)*.4);padding:calc(var(--u)*1.2) calc(var(--u)*.6);border-radius:calc(var(--u)*2);background:rgba(255,255,255,.1);box-shadow:inset 0 0 0 2px rgba(255,255,255,.18);text-align:center;min-height:calc(var(--u)*17)}
+.spt small{font-size:calc(var(--u)*2.1);font-weight:700;line-height:1.15;color:#EDE6FF}
+.spt em{font-style:normal;font-size:calc(var(--u)*2.4);font-weight:800;color:#FFE45C}
+.spi{display:grid;place-items:center;height:calc(var(--u)*8);width:100%;font-size:calc(var(--u)*5.6)}
+.spi.sk{height:calc(var(--u)*9)}.spi svg{max-height:calc(var(--u)*9);width:auto}
+.spt.hot{background:linear-gradient(180deg,#FFE45C,#FF9F1C);box-shadow:0 0 0 3px #fff,0 0 22px #FFB11F;transform:scale(1.08);z-index:2}
+.spt.hot small,.spt.hot em{color:#3A1A00}
+.spt.next{box-shadow:inset 0 0 0 3px #B6FF3B}
+.spt.big{box-shadow:inset 0 0 0 3px #C084FC;background:linear-gradient(160deg,rgba(192,132,252,.28),rgba(255,255,255,.05))}
+.spt.got{opacity:.5;filter:grayscale(.6)}
+.mega.fin{filter:grayscale(.85);opacity:.65}
+.spgo{width:100%;height:calc(var(--u)*9);font-size:calc(var(--u)*3.4)}
+
+/* ---- buy diamonds ---- */
+.pks{display:grid;grid-template-columns:repeat(3,1fr);gap:calc(var(--u)*1.4);margin:calc(var(--u)*1.2) 0}
+.pk1{position:relative;display:flex;flex-direction:column;align-items:center;gap:calc(var(--u)*.4);padding:calc(var(--u)*2) calc(var(--u)*1);border:0;border-radius:calc(var(--u)*2);background:linear-gradient(180deg,rgba(255,255,255,.14),rgba(255,255,255,.05));box-shadow:inset 0 0 0 2px rgba(255,255,255,.2);color:#fff;font-family:inherit;cursor:pointer}
+.pk1 .pg{font-size:calc(var(--u)*5)}.pk1 b{font-size:calc(var(--u)*4);color:#9DEBFF}.pk1 small{font-size:calc(var(--u)*3);font-weight:800;color:#FFE45C}
+.pk1.best{box-shadow:inset 0 0 0 3px #FFB11F,0 0 18px rgba(255,177,31,.45);background:linear-gradient(180deg,rgba(255,177,31,.3),rgba(255,255,255,.06))}
+.pk1 em{position:absolute;top:calc(var(--u)*-1.2);left:50%;transform:translateX(-50%);font-style:normal;font-size:calc(var(--u)*1.7);font-weight:800;background:#FFB11F;color:#3A1A00;padding:calc(var(--u)*.3) calc(var(--u)*1.2);border-radius:calc(var(--u)*2);white-space:nowrap}
+.pk1:disabled{opacity:.5}
+.pyl a{color:#9DEBFF}

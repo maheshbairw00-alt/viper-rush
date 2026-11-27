@@ -521,7 +521,7 @@
   }
 
   /* ---------- skins / characters / animations (all unlocked with diamonds) + membership ---------- */
-  var ctab = 'skin', SEASON_PRICE = 995;
+  var ctab = 'skin', SEASON_PRICE = 2000;
   var INVKEY = { skin: 'skins', char: 'chars', anim: 'anims' };
   var DIA = '<svg class="di" aria-hidden="true"><use href="#icoD"/></svg>';
   function openCosmetics(keepScroll) {
@@ -534,9 +534,10 @@
       (!eqid ? '<button class="gb dis" type="button" disabled>EQUIPPED</button>' : '<button class="gb" type="button" data-a="ceq" data-id="">EQUIP</button>') + '</div>';
     L.forEach(function (x) {
       var own = !!inv[x.id], pic = ctab === 'skin' ? VR.cos.svgBody(x) : ctab === 'char' ? VR.cos.svgFace(x) : VR.cos.svgAnim(x);
-      var sub = x.pass ? 'SEASON 1 ONLY' : (ctab === 'char' ? x.note : (x.L ? 'LEGENDARY' : (x.note || 'NORMAL')));
+      var sub = x.pass ? 'SEASON 1 ONLY' : x.spin ? 'REWARD SPIN' : (ctab === 'char' ? x.note : (x.L ? 'LEGENDARY' : (x.note || 'NORMAL')));
       var btn;
-      if (own) btn = eqid === x.id ? '<button class="gb dis" type="button" disabled>EQUIPPED</button>' : '<button class="gb" type="button" data-a="ceq" data-id="' + x.id + '">EQUIP</button>';
+      if (!own && x.spin) btn = '<button class="gb dis" type="button" disabled>REWARD SPIN ONLY</button>';
+      else if (own) btn = eqid === x.id ? '<button class="gb dis" type="button" disabled>EQUIPPED</button>' : '<button class="gb" type="button" data-a="ceq" data-id="' + x.id + '">EQUIP</button>';
       else if (x.pass) btn = '<button class="gb pk" type="button" data-a="openmem">SEASON PASS</button>';
       else btn = '<button class="gb pk" type="button" data-a="cbuy" data-id="' + x.id + '">' + DIA + ' ' + x.p + '</button>';
       if (!x.pass && x.p > 0) btn += '<button class="gb pk gft" type="button" data-a="cgift" data-id="' + x.id + '">GIFT 🎁</button>';
@@ -737,6 +738,7 @@
     $('ranksBtn').addEventListener('click', openRanks);
     $('skinsBtn').addEventListener('click', function () { openCosmetics(); });
     $('storeBtn').addEventListener('click', function () { VR.store.open(); });
+    $('rewardBtn').addEventListener('click', function () { VR.spin.open(); });
     $('roomBtn').addEventListener('click', function () { VR.rooms.open(); });
     $('invBtn').addEventListener('click', function () { VR.store.openInventory(); });
     $('memBtn').addEventListener('click', openMembership);
@@ -761,7 +763,7 @@
       b.addEventListener('click', function () { VR.ui.toast(b.dataset.soon + ' - coming soon'); });
     });
     $('coinChip').addEventListener('click', function () { VR.ui.toast('Viper Coin store - coming soon'); });
-    $('gemChip').addEventListener('click', function () { VR.ui.toast('Diamond store - coming soon'); });
+    $('gemChip').addEventListener('click', function () { VR.pay.open(); });
     $('navSettings').addEventListener('click', openSettings);
     $('settingsBtn').addEventListener('click', openSettings);
     $('startBtn').addEventListener('click', function () {

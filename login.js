@@ -12,7 +12,7 @@
  * and saves on the phone only.
  *
  * API:  VR.auth.user   VR.auth.load()   VR.auth.save()   VR.auth.login(provider)   VR.auth.logout()
- *       VR.auth.saveSocial(obj)   VR.auth.pull()
+ *       VR.auth.saveSocial(obj)   VR.auth.pull()   VR.auth.idToken()   VR.auth.payList()   VR.auth.payClaim(id)
  *       VR.login.init()  (wires the three buttons)
  */
 (function () {
@@ -139,6 +139,13 @@
       m.from = u.name || 'Player'; m.fromId = u.id; m.type = 'gift'; m.ts = Date.now(); m.exp = m.ts + 30 * 86400000;
       return col2('viperrush_mail').add(m);
     },
+    // payments: the login token proves who is paying, and paid diamonds are waiting in viperrush_payments until the player takes them
+    idToken: function () { var u = fb().auth().currentUser; return u ? u.getIdToken() : Promise.reject(new Error('login')); },
+    payList: function () {
+      var u = auth.user; if (!isReal(u)) return Promise.resolve([]);
+      return col2('viperrush_payments').where('uid', '==', u.id).where('claimed', '==', false).get().then(function (q) { var a = []; q.forEach(function (d) { a.push({ id: d.id, gems: d.data().gems | 0 }); }); return a; });
+    },
+    payClaim: function (id) { return col2('viperrush_payments').doc(id).update({ claimed: true }); },
     // tournament / custom room result (the admin sees it and gives the prize)
     submitResult: function (o) {
       var u = auth.user; if (!isReal(u) || !o || !o.room) return;
@@ -206,6 +213,7 @@
         auth.login(b.getAttribute('data-provider')).then(function (user) {
           reset();
           VR.lobby.enter(user);
+          if (VR.pay) setTimeout(function () { VR.pay.sweep(); }, 2000);
         }).catch(function (err) {
           reset();
           var code = err && err.code ? err.code : '';
